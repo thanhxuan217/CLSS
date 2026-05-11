@@ -3,7 +3,6 @@
 import os
 
 import h5py
-import pdb
 from typing import List
 import flair
 from flair.data import Dictionary, Sentence, Token, Label
@@ -54,7 +53,6 @@ def predict_embeddings(self,doc_dict,embedding,file_name):
         try: 
             assert len(doc_dict[key])==len(sentences_emb)
         except:
-            pdb.set_trace()
         for i, sentence in enumerate(doc_dict[key]):
             for token, token_idx in zip(sentence.tokens, range(len(sentence.tokens))):
                 word_embedding = sentences_emb[i][token_idx]
@@ -144,9 +142,7 @@ for idx, embedding in enumerate(embeddings.embeddings):
     writer = h5py.File(output_file, 'a')
     for doc_id, doc_key in enumerate(doc_sentence_dict):
         if doc_key!='start':
-            # pdb.set_trace()
             sentences=embedding.add_document_embeddings(doc_sentence_dict[doc_key], window_size=args.window_size, stride=args.stride, batch_size = args.batch_size)
-            # pdb.set_trace()
             # ====================================== debug =========================================
             # lm_file = h5py.File('../temp/biaffine-ner/bert_features.hdf5', "r")
             # group = lm_file['train_0']
@@ -155,7 +151,6 @@ for idx, embedding in enumerate(embeddings.embeddings):
             # idx=-1
             # sentfeat=np.concatenate([sentences_emb[idx][:,:,i] for i in range(sentences_emb[idx].shape[-1])],-1)
             # for i in range(len(sentences_emb[idx])): np.absolute(sentences[idx][i].embedding.cpu().numpy()-sentfeat[i]).max()
-            # pdb.set_trace()
             # ====================================== debug =========================================
             file_key = doc_key.replace('/', ':')
             for sentence_index, sentence in enumerate(sentences):

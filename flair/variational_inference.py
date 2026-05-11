@@ -8,7 +8,6 @@ from enum import Enum
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import pdb
 from .linear_functions import *
 import flair.nn
 
@@ -88,13 +87,11 @@ class MFVI(nn.Module):
 					self.end_transitions = nn.Parameter(torch.randn(self.tagset_size,self.tagset_size))
 		self.to(flair.device)
 	def forward(self,token_feats,unary_score,mask, lengths):
-		# pdb.set_trace()
 		sent_len=token_feats.shape[1]
 		unary_score = unary_score * mask.unsqueeze(-1)
 		token_feats=token_feats*mask.unsqueeze(-1)
 		if self.use_second_order:
 			if sent_len<=1:
-				# pdb.set_trace()
 				return unary_score
 			if self.use_quadrilinear:
 				# [batch_size, tokens, window_size, tagset_size, tagset_size]
@@ -112,7 +109,6 @@ class MFVI(nn.Module):
 		else:
 			binary_score=None
 		# if sent_len==2:
-		# 	pdb.set_trace()
 		if self.use_third_order:
 			if sent_len<=2 and not self.use_second_order:
 				return unary_score
@@ -136,7 +132,6 @@ class MFVI(nn.Module):
 		# unary: [batch, sent_length, labels]
 		# binary: (list)[batch, sent_length-window_size, labels, labels']/[labels, labels']. i-th place encodes the score between (i,i+1)
 		# ternary: [batch, sent_length-2, labels, labels', labels'']/[labels, labels', labels'']. i-th place encodes the score between (i,i+1,i+2)
-		# pdb.set_trace()
 		# unary = unary*mask.unsqueeze(-1)
 		unary_potential = unary.clone()
 		sent_len=unary_potential.shape[1]
@@ -198,7 +193,6 @@ class MFVI(nn.Module):
 						right_sum[:,:-j]+=torch.einsum('nsb,ab->nsa',[q_value[:,j:],binary[j-1]])
 						if self.add_start_end:
 							right_sum[batch_range,lengths-j]+=self.end_transitions[j-1]
-				# pdb.set_trace()
 				second_order_msg=left_sum+right_sum
 				if self.add_start_end:
 					second_order_msg[:,0:self.window_size]+=self.start_transitions
@@ -211,8 +205,6 @@ class MFVI(nn.Module):
 				middle_sum = torch.zeros_like(q_value)
 				right_sum = torch.zeros_like(q_value)
 				# [batch, sent_length-2, labels'] * [batch, sent_length-2, labels''] * [batch, sent_length-2, labels, labels',labels''] -> [batch, sent_length, labels]
-				# pdb.set_trace()
-				# pdb.set_trace()
 				if self.use_hexalinear:
 					'''
 					debug:
@@ -251,7 +243,6 @@ class MFVI(nn.Module):
 
 					middle_sum[batch_range,lengths-1]+=torch.einsum('na,ab->nb',[q_value[batch_range,lengths-2],self.end_transitions])
 					right_sum[batch_range,lengths-2]+=torch.einsum('nb,ab->na',[q_value[batch_range,lengths-1],self.end_transitions])
-				# pdb.set_trace()
 				third_order_msg=left_sum+middle_sum+right_sum
 			else:
 				third_order_msg=0

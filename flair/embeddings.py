@@ -13,21 +13,6 @@ from bpemb import BPEmb
 from deprecated import deprecated
 from torch.nn import ParameterList, Parameter
 import time
-import pdb
-from pytorch_transformers import ( 
-    RobertaTokenizer,
-    RobertaModel,
-    TransfoXLTokenizer,
-    TransfoXLModel,
-    OpenAIGPTModel,
-    OpenAIGPTTokenizer,
-    GPT2Model,
-    GPT2Tokenizer,
-    XLMTokenizer,
-    XLMModel,
-    PreTrainedTokenizer,
-    PreTrainedModel,
-)
 
 from transformers import XLNetTokenizer, T5Tokenizer, GPT2Tokenizer, AutoTokenizer, AutoConfig, AutoModel
 import copy
@@ -113,7 +98,6 @@ class Embeddings(torch.nn.Module):
             try:
                 sentence_tensor = torch.zeros([len(sentences),max(sentence_lengths),embedding_length]).type_as(sentences[0][0]._embeddings[self.name])
             except:
-                pdb.set_trace()
             for sent_id, sentence in enumerate(sentences):
                 for token_id, token in enumerate(sentence):
                     sentence_tensor[sent_id,token_id]=token._embeddings[self.name]
@@ -651,7 +635,6 @@ class FastWordEmbeddings(TokenEmbeddings):
         return embed
 
     def embed_sentences(self, sentences):
-        # pdb.set_trace()
         words=getattr(sentences,self.name+'words').to(flair.device)
         embeddings = self.word_embedding(words)
         if self.additional_empty_embedding:
@@ -801,7 +784,6 @@ class LemmaEmbeddings(TokenEmbeddings):
         return self.__embedding_length
 
     def embed_sentences(self, sentences):
-        # pdb.set_trace()
         words=getattr(sentences,self.name).to(flair.device)
         embeddings = self.lemma_embedding(words)
         return embeddings
@@ -852,7 +834,6 @@ class POSEmbeddings(TokenEmbeddings):
         return self.__embedding_length
 
     def embed_sentences(self, sentences):
-        # pdb.set_trace()
         words=getattr(sentences,self.name).to(flair.device)
         embeddings = self.pos_embedding(words)
         return embeddings
@@ -1313,7 +1294,6 @@ class ELMoEmbeddings(TokenEmbeddings):
         sentence_words: List[List[str]] = []
         for sentence in sentences:
             sentence_words.append([token.text for token in sentence])
-        # pdb.set_trace()
         embeddings = self.ee.embed_batch(sentence_words)
 
         for i, sentence in enumerate(sentences):
@@ -2124,7 +2104,6 @@ class XLMRoBERTaEmbeddings(TokenEmbeddings):
             eos_token="</s>",
             gradient_context=gradient_context,
         )
-        # pdb.set_trace()
         if hasattr(sentences, 'features'):
             sentences = self.assign_batch_features(sentences)
         
@@ -2526,7 +2505,6 @@ class FlairEmbeddings(TokenEmbeddings):
 
             all_hidden_states_in_lm = all_hidden_states_in_lm.detach()
             all_hidden_states_in_lm = None
-            # pdb.set_trace()
         if hasattr(sentences, 'features'):
             sentences = self.assign_batch_features(sentences)
         return sentences
@@ -2776,7 +2754,6 @@ class BertEmbeddings(TokenEmbeddings):
                 )
             )
         except:
-            pdb.set_trace()
         if not hasattr(self,'max_sequence_length'):
             self.max_sequence_length=510
         if longest_sentence_in_batch>self.max_sequence_length:
@@ -2798,7 +2775,6 @@ class BertEmbeddings(TokenEmbeddings):
         # self.model.eval()
         if not self.fine_tune:
             self.model.eval()
-        # pdb.set_trace()
         gradient_context = torch.enable_grad() if self.fine_tune and self.training else torch.no_grad()
 
 
@@ -2865,7 +2841,6 @@ class BertEmbeddings(TokenEmbeddings):
                         try:
                             mean = torch.mean(torch.cat(embeddings, dim=0), dim=0)
                         except:
-                            pdb.set_trace()
                         token.set_embedding(self.name, mean)
 
                     token_idx += feature.token_subtoken_count[token.idx] - 1
@@ -3018,7 +2993,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         if self.name == '/nas-alitranx/yongjiang.jy/wangxy/transformers/nl-bert_10epoch_0.5inter_500batch_0.00005lr_20lrrate_nl_monolingual_nocrf_fast_warmup_freezing_beta_weightdecay_finetune_saving_nodev_iwpt21_enhancedud14/bert-base-dutch-cased' or self.name == '/nas-alitranx/yongjiang.jy/wangxy/transformers/nl-xlmr-first_10epoch_0.5inter_1batch_4accumulate_0.000005lr_20lrrate_nl_monolingual_nocrf_fast_warmup_freezing_beta_weightdecay_finetune_saving_sentbatch_nodev_iwpt21_enhancedud16/robbert-v2-dutch-base':
             self.max_subtokens_sequence_length = 510
             self.stride = 255
-            # pdb.set_trace()
         if hasattr(self,'v2_doc') and self.v2_doc:
             model_max_length = self.tokenizer.model_max_length-2
             if model_max_length>510:
@@ -3115,7 +3089,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                     else:
                         tokenized_string = re.sub('<EOS>', self.tokenizer._sep_token, tokenized_string)
                 else:
-                    pdb.set_trace()
             else:
                 sent_tokens = sentence.tokens
             # method 1: subtokenize sentence
@@ -3130,7 +3103,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
             else:
                 non_empty_sentences.append(sentence)
             # token_subtoken_lengths = self.reconstruct_tokens_from_subtokens(sentence, subtokenized_sentence)
-            # pdb.set_trace()
             token_subtoken_lengths = self.reconstruct_tokens_from_subtokens(sent_tokens, subtokenized_sentence)
             token_subtoken_lengths = torch.LongTensor(token_subtoken_lengths)
             if (token_subtoken_lengths > self.maximum_subtoken_length).any():
@@ -3138,14 +3110,12 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 current_idx = 0
                 for subtoken_length in token_subtoken_lengths:
                     if subtoken_length > self.maximum_subtoken_length:
-                        # pdb.set_trace()
                         new_subtokenized_sentence+=subtokenized_sentence[current_idx:current_idx+self.maximum_subtoken_length]
                         # current_idx += self.maximum_subtoken_length
                     else:
                         new_subtokenized_sentence+=subtokenized_sentence[current_idx:current_idx+subtoken_length]
                     current_idx += subtoken_length
                 token_subtoken_lengths[torch.where(token_subtoken_lengths>self.maximum_subtoken_length)] = self.maximum_subtoken_length
-                # pdb.set_trace()
                 subtokenized_sentence = new_subtokenized_sentence
             
             subtokenized_sentences_token_lengths.append(token_subtoken_lengths)
@@ -3441,7 +3411,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 elif self.tokenizer._sep_token is not None:
                     tokenized_string = re.sub('<EOS>', self.tokenizer._sep_token, tokenized_string)
                 else:
-                    pdb.set_trace()
             # method 1: subtokenize sentence
             # subtokenized_sentence = self.tokenizer.encode(tokenized_string, add_special_tokens=True)
 
@@ -3474,7 +3443,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         doc_extract_indices = []
         for i in range(0, len(doc_subtokens), stride):
             # if i == len(example.tokens)-1:
-            #     pdb.set_trace()
             if i % batch_size == 0:
                 if i!=0:
                     doc_input_ids.append(batch_input_ids)
@@ -3506,7 +3474,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
             window_start = i
             window_end=min(i + window_size, len(doc_subtokens))
             input_ids = torch.Tensor(doc_subtokens[window_start:window_end]).type_as(batch_input_ids)
-            # pdb.set_trace()
             mask = torch.ones_like(input_ids).type_as(batch_mask)
             batch_input_ids[i % batch_size, :len(input_ids)] = input_ids
             batch_mask[i % batch_size, :len(mask)] = mask
@@ -3535,7 +3502,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         # sublens=[sum(x) for x in doc_token_subtoken_lengths]
         with gradient_context:
         
-            # pdb.set_trace()
             # assert sum([len(x) for x in doc_extract_indices]) == len(doc_subtokens)
             if batch_input_ids.sum()!=0:
                 doc_input_ids.append(batch_input_ids)
@@ -3545,7 +3511,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 hidden_states=torch.stack(self.model(doc_input_ids[i], attention_mask=doc_input_masks[i])[-1])[self.layer_indexes]
                 hidden_states = hidden_states.permute([1,2,3,0])
                 # reshape to batch x subtokens x hidden_size*layers
-                # pdb.set_trace()
                 # hidden_states = hidden_states.reshape(hidden_states.shape[0],hidden_states.shape[1],-1)
                 hidden_states = [hidden_states[:,:,:,x] for x in range(len(self.layer_indexes))]
                 hidden_states = torch.cat(hidden_states,-1)
@@ -3559,7 +3524,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                         # assert len(extract_indices)==len(token_ids_to_extract)
                         doc_hidden_states[torch.Tensor(token_ids_to_extract).long()] = hidden_state[torch.Tensor(extract_indices).long()]
                     except:
-                        pdb.set_trace()
                 # doc_hidden_states.append()
             # make the tuple a tensor; makes working with it easier.
             # iterate over all subtokenized sentences
@@ -3635,7 +3599,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 sentence.batch_pos = {}
                 sentence.target_tokens = {}
                 sentence.token_subtoken_lengths = {}
-            # pdb.set_trace()
             if self.name in sentence.batch_pos:
                 start_pos, end_pos = sentence.batch_pos[self.name]
                 target_tokens = sentence.target_tokens[self.name]
@@ -3802,7 +3765,6 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                         try:
                             final_embedding: torch.FloatTensor = current_embeddings[0]
                         except:
-                            pdb.set_trace()
 
                     if self.pooling_operation == "last":
                         final_embedding: torch.FloatTensor = current_embeddings[-1]

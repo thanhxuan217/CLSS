@@ -149,7 +149,6 @@ class ModelFinetuner(ModelDistiller):
 				self.corpus._dev: FlairDataset = ConcatDataset([data for data in self.corpus.dev_list])		
 				self.corpus._test: FlairDataset = ConcatDataset([data for data in self.corpus.test_list])		
 			# for key in pretrained_file_dict:
-			# pdb.set_trace()
 			for embedding in self.model.embeddings.embeddings:
 				if embedding.name in pretrained_file_dict:
 					self.assign_predicted_embeddings(doc_sentence_dict,embedding,pretrained_file_dict[embedding.name])
@@ -309,13 +308,10 @@ class ModelFinetuner(ModelDistiller):
 		self.train_with_professor: bool = train_with_professor
 		# if self.train_with_professor:
 		#   assert len(self.professors) == len(self.corpus.train_list), 'Now only support same number of professors and corpus!'
-		# pdb.set_trace()
 		self.use_unlabeled_data = False
 		if hasattr(self.model, 'multi_view_training') and self.model.multi_view_training:
 			use_unlabeled_data = False
 			# if len(self.corpus.train_list) > 2:
-			# 	pdb.set_trace()
-			# pdb.set_trace()
 			target_corpus_list = []
 			for corpus_name in self.corpus2id:
 				if 'doc' in corpus_name.lower():
@@ -333,7 +329,6 @@ class ModelFinetuner(ModelDistiller):
 
 				target_corpus_id = self.corpus2id[target_corpus_name]
 				source_corpus_id = self.corpus2id[source_corpus_name]
-				# pdb.set_trace()
 				for sent_id, sentence in enumerate(self.corpus.train_list[target_corpus_id]):
 					sentence.orig_sent=self.corpus.train_list[source_corpus_id][sent_id]
 				for sent_id, sentence in enumerate(self.corpus.dev_list[target_corpus_id]):
@@ -343,7 +338,6 @@ class ModelFinetuner(ModelDistiller):
 			if use_unlabeled_data:
 				unlabeled_corpus_id = self.corpus2id[unlabel_corpus_name]
 				for sent_id, sentence in enumerate(self.corpus.train_list[unlabeled_corpus_id]):
-					# pdb.set_trace()
 					
 					current_sentence = copy.deepcopy(sentence)
 					words = [x.text for x in current_sentence.tokens]
@@ -543,7 +537,6 @@ class ModelFinetuner(ModelDistiller):
 		finetune_params=[param for name,param in self.model.named_parameters() if 'embedding' in name or name=='linear.weight' or name=='linear.bias']
 		other_params=[param for name,param in self.model.named_parameters() if 'embedding' not in name and name !='linear.weight' and name !='linear.bias']
 		# all_params = [param for name,param in self.model.named_parameters()]
-		# pdb.set_trace()
 		# other_params = {name:param for name,param in self.model.named_parameters() if 'embeddings' not in name}
 		if len(self.update_params_group)>0:
 			optimizer: torch.optim.Optimizer = self.optimizer(
@@ -901,7 +894,6 @@ class ModelFinetuner(ModelDistiller):
 										loss=loss*(1-multi_view_rate)
 										multi_view_training = True
 									if loss == 0:
-										# pdb.set_trace()
 										is_unlabeled_batch = True
 									# for sentence in student_input:
 									# 	if hasattr(sentence,'orig_sent') and sentence.orig_sent is not None:
@@ -934,7 +926,6 @@ class ModelFinetuner(ModelDistiller):
 								loss = loss/average_factor
 							if multi_view_training and loss!=0:
 								train_loss += loss.item()
-						# pdb.set_trace()
 						if use_amp:
 							with amp.scale_loss(loss, optimizer) as scaled_loss:
 								scaled_loss.backward()
@@ -960,7 +951,6 @@ class ModelFinetuner(ModelDistiller):
 								loss.backward()
 						if self.use_unlabeled_data:
 							with caster:
-								# pdb.set_trace()
 								unlabeled_input = unlabeled_loader[random.randint(0,len(unlabeled_loader)-1)]
 								with torch.no_grad():
 									unlabeled_features = self.model.forward(unlabeled_input)
@@ -985,8 +975,6 @@ class ModelFinetuner(ModelDistiller):
 						log.info(f"{student_input}")
 						if self.use_unlabeled_data:
 							log.info(f"{unlabeled_input}")
-						pdb.set_trace()
-					# pdb.set_trace()
 					# print(self.model.linear.weight.sum())
 					if loss != 0:
 						train_loss += loss.item()
@@ -1249,7 +1237,6 @@ class ModelFinetuner(ModelDistiller):
 					# else:
 					self.model.save(base_path / "best-model.pt")
 					if save_finetuned_embedding:
-						# pdb.set_trace()
 						log.info(f"==================Saving the best language model: {current_score}==================") 
 						for embedding in self.model.embeddings.embeddings:
 							if hasattr(embedding,'fine_tune') and embedding.fine_tune: 
@@ -1263,7 +1250,6 @@ class ModelFinetuner(ModelDistiller):
 			if save_final_model and not param_selection_mode:
 				self.model.save(base_path / "final-model.pt")
 				if save_finetuned_embedding and train_with_dev:
-					# pdb.set_trace()
 					log.info(f"==================Saving the best language model: {current_score}==================") 
 					for embedding in self.model.embeddings.embeddings:
 						if hasattr(embedding,'fine_tune') and embedding.fine_tune: 
@@ -1291,7 +1277,6 @@ class ModelFinetuner(ModelDistiller):
 			final_score = 0
 			log.info("Test data not provided setting final score to 0")
 
-		# pdb.set_trace()
 		log.removeHandler(log_handler)
 
 		if self.use_tensorboard:
@@ -1403,7 +1388,6 @@ class ModelFinetuner(ModelDistiller):
 				loader.word_map = teacher.word_map
 				loader.char_map = teacher.char_map
 				if self.model.tag_dictionary.item2idx !=teacher.tag_dictionary.item2idx:
-					pdb.set_trace()
 					assert 0, "the tag_dictionaries of the teacher and student are not same"
 				for batch in loader:
 					counter+=len(batch)
@@ -1443,7 +1427,6 @@ class ModelFinetuner(ModelDistiller):
 							try:
 								sentence.set_teacher_sentfeats(teacher.sent_feats[idx],self.distill_storage_mode)
 							except:
-								pdb.set_trace()
 						if not faster:
 							if self.model.tag_type=="dependency":
 								if self.model.distill_factorize:
@@ -1491,7 +1474,6 @@ class ModelFinetuner(ModelDistiller):
 				loader.word_map = teacher.word_map
 				loader.char_map = teacher.char_map
 				if self.model.tag_dictionary.item2idx !=teacher.tag_dictionary.item2idx:
-					# pdb.set_trace()
 					assert 0, "the tag_dictionaries of the teacher and student are not same"
 				for batch in loader:
 					counter+=len(batch)
@@ -1564,7 +1546,6 @@ class ModelFinetuner(ModelDistiller):
 								# if 0 in test:
 								#   for i,line in enumerate(test):
 								#       if 0 in line and sent_len[i]!=1:
-								#           pdb.set_trace()
 						if self.model.distill_posterior:
 							if self.model.tag_type=='dependency':
 								if self.model.distill_rel:
@@ -1595,7 +1576,6 @@ class ModelFinetuner(ModelDistiller):
 									forward_backward_score = (forward_var + backward_var) * mask.float()
 
 
-									# pdb.set_trace()
 									# temperature = 10
 									# partition_score = teacher._forward_alg(logits,lengths1, T = temperature)
 									# forward_var = teacher._forward_alg(logits, lengths1, distill_mode=True, T = temperature)
@@ -1623,7 +1603,6 @@ class ModelFinetuner(ModelDistiller):
 						if self.model.distill_exact:
 							batch_range=torch.arange(logits.shape[0])
 							binary_mask=self.model.sequence_mask(lengths1-1, max_len-1).to(flair.device).long()
-							# pdb.set_trace()
 							if not hasattr(teacher,'transitions'):
 								# add temperature in the score
 								logits=logits/self.model.temperature
@@ -1631,7 +1610,6 @@ class ModelFinetuner(ModelDistiller):
 								logits[:,:,teacher.tag_dictionary.get_idx_for_item(START_TAG)]-=1e12
 								logits[:,:,teacher.tag_dictionary.get_idx_for_item('<unk>')]-=1e12
 								# ============ debug ===========
-								# pdb.set_trace()
 								# if binary_mask.shape[1]>1:
 								#   T=5
 								#   joint_score = (logits[:,:-1,None,:]+logits[:,1:,:,None])/T
@@ -1647,7 +1625,6 @@ class ModelFinetuner(ModelDistiller):
 
 
 								maxent_prob = logits.softmax(-1)
-								# pdb.set_trace()
 								# y_i * y_{i-1} -> (y_i,y_{i-1})
 								# right
 								joint_prob = maxent_prob[:,:-1,None,:]*maxent_prob[:,1:,:,None]
@@ -1717,7 +1694,6 @@ class ModelFinetuner(ModelDistiller):
 								#   # forward_var: a[0], a[1], ..., a[n-2]
 								#   # backward_var: b[1], a[2], ..., b[n-1]
 								#   # structure_score: s[1,0], s[2,1], ..., s[n-1,n-2] (so without s[0,start], s[end,n-1])
-								#   pdb.set_trace()
 								#   forward_backward_score2 = (forward_var[:,:-1,None,:] + backward_var[:,1:,:,None]+ structure_score[:,1:]) * binary_mask.unsqueeze(-1).unsqueeze(-1).float()/ self.model.temperature
 								#   fw_bw_partition2 = forward_backward_score2.view(forward_backward_score2.shape[0],forward_backward_score2.shape[1],-1).logsumexp(-1)
 
@@ -1743,7 +1719,6 @@ class ModelFinetuner(ModelDistiller):
 								#   print(max(lengths1))
 
 								# if binary_mask.shape[1] == 2 and 0:
-								#   pdb.set_trace()
 								#   # 2,1 -> 3,2,1 || 3,2 -> 3,2,1
 								#   temperature = 5
 								#   # partition_score = teacher._forward_alg(logits, lengths1)
@@ -1818,7 +1793,6 @@ class ModelFinetuner(ModelDistiller):
 								#   teacher_overall_prob2 = teacher_overall_score.softmax(-1)
 
 								#=============== debug ==============
-								# pdb.set_trace()
 								# partition_score = teacher._forward_alg(logits,lengths1, T=self.model.temperature)
 								# print(((forward_backward_score.logsumexp([-1,-2])[:,0]-partition_score)*((lengths1-1)>0).type_as(partition_score)).abs().max())
 								# print((((forward_backward_score.logsumexp([-1,-2])[:,0]-partition_score)*((lengths1-1)>0).type_as(partition_score)).abs()>0).sum()/float(len(forward_backward_score)))
@@ -1878,7 +1852,6 @@ class ModelFinetuner(ModelDistiller):
 					lens=posterior_lens.copy()
 					targets=posteriors.copy()
 				except:
-					pdb.set_trace()
 			if self.model.distill_exact:
 				# ===== debug ====
 				# targets=[x._teacher_prediction for x in batch]
@@ -1899,7 +1872,6 @@ class ModelFinetuner(ModelDistiller):
 				targets=[x._teacher_prediction for x in batch]
 				if hasattr(self.model, 'distill_factorize') and self.model.distill_factorize:
 					rel_targets=[x._teacher_rel_prediction for x in batch]
-				# pdb.set_trace()
 				lens=[len(x[0]) for x in targets]
 			sent_lens=[len(x) for x in batch]
 
@@ -1952,7 +1924,6 @@ class ModelFinetuner(ModelDistiller):
 								# shape=[max_shape-1,max_shape-1] + list(post_val.shape[2:])
 								shape=[max_shape,max_shape] + list(post_val.shape[2:])
 								# if max_shape==8:
-								#   pdb.set_trace()
 								new_posterior=torch.zeros(shape).type_as(post_val)
 								# remove the root token
 								# new_posterior[:sent_lens[index]-1,:sent_lens[index]-1]=post_val[:sent_lens[index]-1,:sent_lens[index]-1]
@@ -1972,19 +1943,15 @@ class ModelFinetuner(ModelDistiller):
 								new_sentfeats.append(new_sentfeat)
 							if is_posterior:
 								bias = 0
-								# pdb.set_trace()
 								if self.model.distill_exact:
 									bias = 1
 								# if max_shape - bias == 0:
-								# pdb.set_trace()
 								# if sent_lens[index] == 1:
-								#   pdb.set_trace()
 								post_val=post_vals[idx]
 								shape=[max_shape-bias]+list(post_val.shape[1:])
 								new_posterior=torch.zeros(shape).type_as(post_val)
 								new_posterior[:sent_lens[index]-bias]=post_val[:sent_lens[index]-bias]
 								new_posteriors.append(new_posterior)
-							# pdb.set_trace()
 							if self.model.distill_exact:
 								start_val=start_vals[idx]
 								shape=[max_shape]+list(start_val.shape[1:])
@@ -2013,11 +1980,9 @@ class ModelFinetuner(ModelDistiller):
 					try:
 						batch.teacher_features['posteriors']=torch.stack([sentence.get_teacher_posteriors() for sentence in batch],0).cpu()
 					except:
-						pdb.set_trace()
 					# lens=[len(x) for x in batch]
 					# posteriors = batch.teacher_features['posteriors']
 					# if max(lens) == posteriors.shape[-1]:
-					#   pdb.set_trace()
 				if self.model.distill_exact:
 					batch.teacher_features['start_scores']=torch.stack([sentence.get_teacher_startscores() for sentence in batch],0).cpu()
 					batch.teacher_features['end_scores']=torch.stack([sentence.get_teacher_endscores() for sentence in batch],0).cpu()
@@ -2085,9 +2050,7 @@ class ModelFinetuner(ModelDistiller):
 				#     XE[current_idx]+=((log_prob*tag_distribution*mask.float()).sum(-1).sum(-1)/(mask.float().sum(-1).sum(-1)*tag_distribution.shape[-1])).sum()
 				#     weighted_XE[current_idx]+=((log_prob*weighted_tag_distribution*mask.float()).sum(-1).sum(-1)/(mask.float().sum(-1).sum(-1)*weighted_tag_distribution.shape[-1])).sum()
 				#     if best_k==min_k or best_k==max_k-1:
-				#         pdb.set_trace()
 					
-			pdb.set_trace()
 			print(total)
 			print(total_tp)
 			# print('XE: ',XE)
@@ -2132,7 +2095,6 @@ class ModelFinetuner(ModelDistiller):
 			loader=ColumnDataLoader(list(self.corpus.test),eval_mini_batch_size, use_bert=self.use_bert,tokenizer=self.bert_tokenizer, model = self.model, sentence_level_batch = self.sentence_level_batch, sort_data=sort_data)
 			loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 			with torch.no_grad():
-				# pdb.set_trace()
 				self.gpu_friendly_assign_embedding([loader])
 			for x in sorted(loader[0].features.keys()):
 				print(x)
@@ -2378,7 +2340,6 @@ class ModelFinetuner(ModelDistiller):
 	#       try: 
 	#           assert len(doc_dict[key])==len(sentences_emb)
 	#       except:
-	#           pdb.set_trace()
 	#       for i, sentence in enumerate(doc_dict[key]):
 	#           for token, token_idx in zip(sentence.tokens, range(len(sentence.tokens))):
 	#               word_embedding = sentences_emb[i][token_idx]

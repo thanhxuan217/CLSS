@@ -20,7 +20,6 @@ from flair.training_utils import Metric, Result, store_embeddings
 from tqdm import tqdm
 from tabulate import tabulate
 import numpy as np
-import pdb
 import copy
 import time
 
@@ -187,7 +186,6 @@ class EnsembleModel(flair.nn.Model):
 		if self.relearn_embeddings:
 			self.embedding2nn = torch.nn.Linear(rnn_input_dim + candidates, rnn_input_dim + candidates)
 		if candidates == -1:
-			pdb.set_trace()
 		self.candidates = candidates
 		self.hidden2score = torch.nn.Linear(rnn_input_dim + candidates, candidates)
 
@@ -269,7 +267,6 @@ class EnsembleModel(flair.nn.Model):
 		return model_state
 	def forward(self, sentences: List[Sentence], prediction_mode = False):
 		# self.zero_grad()
-		# pdb.set_trace()
 		lengths: List[int] = [len(sentence.tokens) for sentence in sentences]
 
 		longest_token_sequence_in_batch: int = max(lengths)
@@ -377,7 +374,6 @@ class EnsembleModel(flair.nn.Model):
 				loss = self._calculate_loss(scores, batch, self.mask)
 				eval_loss += loss
 				if self.binary:
-					pdb.set_trace()
 					result = Result(
 						main_score=LF1,
 						log_line=f"\nUF1: {UF1} - LF1 {LF1}",
@@ -477,7 +473,6 @@ class EnsembleModel(flair.nn.Model):
 			tags.append(tag_list.copy())
 
 			if get_all_tags:
-				pdb.set_trace()
 				all_tags.append(
 					[
 						[
@@ -527,7 +522,6 @@ class EnsembleModel(flair.nn.Model):
 			# decode_time+=decode_end-decode_start
 			# ignore all punctuation if not specified
 			# if out_path is not None:
-			#   pdb.set_trace()
 			if not self.punct:
 				for sent_id,sentence in enumerate(batch):
 					for token_id, token in enumerate(sentence):
@@ -595,7 +589,6 @@ class EnsembleModel(flair.nn.Model):
 
 			# deal with masking
 			# if not (arc_preds*mask == result*mask).all():
-			#   pdb.set_trace()
 
 		rel_preds = rel_scores.argmax(-1)
 		rel_preds = rel_preds.gather(-1, arc_preds.unsqueeze(-1)).squeeze(-1)

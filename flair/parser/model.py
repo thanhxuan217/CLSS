@@ -8,7 +8,6 @@ import torch.nn as nn
 from torch.nn.utils.rnn import (pack_padded_sequence, pad_packed_sequence,
 								pad_sequence)
 
-import pdb
 import torch.nn.functional as F
 
 
@@ -122,7 +121,6 @@ class Model(nn.Module):
 			word_embed += self.pretrained(words)
 		feat_embeds=[word_embed]
 		feats_index=0
-		# pdb.set_trace()
 		if self.args.use_char:
 			input_feats=feats[feats_index]
 			feats_index+=1
@@ -208,7 +206,6 @@ class Model(nn.Module):
 		unary_potential = unary.clone()
 		q_value = unary_potential.clone()
 		for i in range(self.args.iterations):
-			# pdb.set_trace()
 			if self.binary:
 				q_value=torch.sigmoid(q_value)
 			else:

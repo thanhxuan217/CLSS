@@ -16,7 +16,6 @@ from torch.utils.data.dataset import ConcatDataset, Subset
 from flair.file_utils import Tqdm
 
 log = logging.getLogger("flair")
-import pdb
 
 class Dictionary:
     """
@@ -639,7 +638,6 @@ class Sentence(DataPoint):
                 iob2(tags)
                 tags = iob_iobes(tags)
         except:
-            pdb.set_trace()
 
         for index, tag in enumerate(tags):
             self.tokens[index].add_tag(tag_type, tag)
@@ -808,11 +806,9 @@ class Sentence(DataPoint):
         elif pooling == 'weighted':
             target=(target*weight[:,None,None]).sum(0)
         elif pooling == 'token_weighted':
-            # pdb.set_trace()
             target=(target*weight[:,:,None].transpose(1,0)).sum(0)
         return target
     def get_professor_teacher_prediction(self, pooling='mean',weight=None, professor_interpolation = 0.5):
-        # pdb.set_trace()
         professor_prediction=self.get_professor_prediction
         teacher_prediction=self._get_teacher_prediction(self._teacher_prediction[1:],pooling,weight)
         final_prediction = professor_interpolation * professor_prediction + (1-professor_prediction) * teacher_prediction
@@ -1095,7 +1091,6 @@ class Corpus:
                         rel=':'.join(rels[1:])
                         tag_dictionary.add_item(rel)    
 
-                    # pdb.set_trace()
                 else:
                     tag_dictionary.add_item(token.get_tag(tag_type).value)
         tag_dictionary.add_item("<START>")

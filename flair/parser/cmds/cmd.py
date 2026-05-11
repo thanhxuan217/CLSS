@@ -13,7 +13,6 @@ import torch
 import torch.nn as nn
 from transformers import BertTokenizer
 
-import pdb
 class CMD(object):
 
     def __call__(self, args):
@@ -96,7 +95,6 @@ class CMD(object):
         # print(f"{self.WORD}\n{self.FEAT}\n{self.HEAD}\n{self.REL}")
         print(f"{self.WORD}\n{self.HEAD}\n{self.REL}")
         update_info={}
-        # pdb.set_trace()
         if args.use_char:
             update_info['n_char_feats']=len(self.CHAR_FEAT.vocab)
         if args.use_pos:
@@ -195,7 +193,6 @@ class CMD(object):
             '''
             arc_loss = (arc_loss*binary_mask).sum()/binary_mask.sum()
             if torch.isnan(arc_loss).any():
-                pdb.set_trace()
             arc_scores, arcs = arc_scores[mask], arcs[mask]
         else:
             arc_scores, arcs = arc_scores[mask], arcs[mask]

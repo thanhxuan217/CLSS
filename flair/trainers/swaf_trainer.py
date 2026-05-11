@@ -550,8 +550,6 @@ class SWAFTrainer(ModelDistiller):
 							pass
 					except Exception:
 						traceback.print_exc()
-						pdb.set_trace()
-					# pdb.set_trace()
 					# print(self.model.linear.weight.sum())
 					train_loss += loss.item()
 					seen_batches += 1
@@ -808,7 +806,6 @@ class SWAFTrainer(ModelDistiller):
 					else:
 						self.model.save(base_path / "best-model.pt")
 					if save_finetuned_embedding:
-						# pdb.set_trace()
 						log.info(f"==================Saving the best language model: {current_score}==================") 
 						for embedding in self.model.embeddings.embeddings:
 							if hasattr(embedding,'fine_tune') and embedding.fine_tune: 
@@ -822,7 +819,6 @@ class SWAFTrainer(ModelDistiller):
 			if save_final_model and not param_selection_mode:
 				self.model.save(base_path / "final-model.pt")
 				if save_finetuned_embedding and train_with_dev:
-					# pdb.set_trace()
 					log.info(f"==================Saving the best language model: {current_score}==================") 
 					for embedding in self.model.embeddings.embeddings:
 						if hasattr(embedding,'fine_tune') and embedding.fine_tune: 
@@ -850,7 +846,6 @@ class SWAFTrainer(ModelDistiller):
 			final_score = 0
 			log.info("Test data not provided setting final score to 0")
 
-		# pdb.set_trace()
 		log.removeHandler(log_handler)
 
 		if self.use_tensorboard:
@@ -888,7 +883,6 @@ class SWAFTrainer(ModelDistiller):
 					lens=posterior_lens.copy()
 					targets=posteriors.copy()
 				except:
-					pdb.set_trace()
 			if self.model.distill_exact:
 				# ===== debug ====
 				# targets=[x._teacher_prediction for x in batch]
@@ -909,7 +903,6 @@ class SWAFTrainer(ModelDistiller):
 				targets=[x._teacher_prediction for x in batch]
 				if hasattr(self.model, 'distill_factorize') and self.model.distill_factorize:
 					rel_targets=[x._teacher_rel_prediction for x in batch]
-				# pdb.set_trace()
 				lens=[len(x[0]) for x in targets]
 			sent_lens=[len(x) for x in batch]
 
@@ -962,7 +955,6 @@ class SWAFTrainer(ModelDistiller):
 								# shape=[max_shape-1,max_shape-1] + list(post_val.shape[2:])
 								shape=[max_shape,max_shape] + list(post_val.shape[2:])
 								# if max_shape==8:
-								#   pdb.set_trace()
 								new_posterior=torch.zeros(shape).type_as(post_val)
 								# remove the root token
 								# new_posterior[:sent_lens[index]-1,:sent_lens[index]-1]=post_val[:sent_lens[index]-1,:sent_lens[index]-1]
@@ -982,19 +974,15 @@ class SWAFTrainer(ModelDistiller):
 								new_sentfeats.append(new_sentfeat)
 							if is_posterior:
 								bias = 0
-								# pdb.set_trace()
 								if self.model.distill_exact:
 									bias = 1
 								# if max_shape - bias == 0:
-								# pdb.set_trace()
 								# if sent_lens[index] == 1:
-								#   pdb.set_trace()
 								post_val=post_vals[idx]
 								shape=[max_shape-bias]+list(post_val.shape[1:])
 								new_posterior=torch.zeros(shape).type_as(post_val)
 								new_posterior[:sent_lens[index]-bias]=post_val[:sent_lens[index]-bias]
 								new_posteriors.append(new_posterior)
-							# pdb.set_trace()
 							if self.model.distill_exact:
 								start_val=start_vals[idx]
 								shape=[max_shape]+list(start_val.shape[1:])
@@ -1023,11 +1011,9 @@ class SWAFTrainer(ModelDistiller):
 					try:
 						batch.teacher_features['posteriors']=torch.stack([sentence.get_teacher_posteriors() for sentence in batch],0).cpu()
 					except:
-						pdb.set_trace()
 					# lens=[len(x) for x in batch]
 					# posteriors = batch.teacher_features['posteriors']
 					# if max(lens) == posteriors.shape[-1]:
-					#   pdb.set_trace()
 				if self.model.distill_exact:
 					batch.teacher_features['start_scores']=torch.stack([sentence.get_teacher_startscores() for sentence in batch],0).cpu()
 					batch.teacher_features['end_scores']=torch.stack([sentence.get_teacher_endscores() for sentence in batch],0).cpu()
@@ -1322,7 +1308,6 @@ class SWAFTrainer(ModelDistiller):
 	# 		try: 
 	# 			assert len(doc_dict[key])==len(sentences_emb)
 	# 		except:
-	# 			pdb.set_trace()
 	# 		for i, sentence in enumerate(doc_dict[key]):
 	# 			for token, token_idx in zip(sentence.tokens, range(len(sentence.tokens))):
 	# 				word_embedding = sentences_emb[i][token_idx]

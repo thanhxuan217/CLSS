@@ -27,7 +27,6 @@ from .biaffine_dp import projection, bilinear_classifier, BiLSTM_1
 from tqdm import tqdm
 from tabulate import tabulate
 import numpy as np
-import pdb
 import copy
 import time
 import datetime
@@ -567,7 +566,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 
 	def forward(self, sentences: List[Sentence], prediction_mode = False):
 		self.zero_grad()
-		# pdb.set_trace()
 		lengths: List[int] = [len(sentence.tokens) for sentence in sentences]
 		self.lengths = lengths
 		longest_token_sequence_in_batch: int = max(lengths)
@@ -611,7 +609,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 		#   sentence_tensor = getattr(sentences,'sentence_tensor').to(flair.device)
 
 		#   if self.debug:
-		#       pdb.set_trace()
 		# else:
 
 		#   self.embeddings.embed(sentences)
@@ -654,12 +651,10 @@ class SemanticDependencyParser1(flair.nn.Model):
 		#   sentence_tensor = self.word_dropout(sentence_tensor)
 		# if self.use_locked_dropout > 0.0:
 		#   sentence_tensor = self.locked_dropout(sentence_tensor)
-		# pdb.set_trace()
 		# if self.relearn_embeddings:
 		# 	sentence_tensor = self.embedding2nn(sentence_tensor)
 			# sentence_tensor = self.embedding2nn(sentence_tensor)
 
-		# pdb.set_trace()
 		if self.use_rnn:
 			x = pack_padded_sequence(sentence_tensor, lengths, True, False)
 			x, _ = self.rnn(x)
@@ -1073,7 +1068,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 				.lt(lengths.unsqueeze(1)))
 	def _calculate_distillation_loss(self, features, teacher_features, mask, binary_mask, T = 1, teacher_is_score=True, student_is_score = True):
 		# TODO: time with mask, and whether this should do softmax
-		# pdb.set_trace()
 		if teacher_is_score:
 			teacher_prob=F.softmax(teacher_features/T, dim=-1)
 		else:
@@ -1100,7 +1094,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 			root_mask = mask.clone()
 			#--------------20200716-ner_dp-----------------------
 			# root_mask[:,0] = 0
-			# pdb.set_trace()
 			binary_mask = root_mask.unsqueeze(-1) * mask.unsqueeze(-2)
 			# triangular binary mask
 			binary_mask = torch.tril(binary_mask, diagonal=0)
@@ -1121,7 +1114,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 				arc_loss = (arc_loss*binary_mask).sum()/binary_mask.sum()
 			else:
 				arc_loss = 0
-			# pdb.set_trace()
 			rel_loss = self.rel_criterion(rel_scores.reshape(-1,self.tagset_size), rel_mat.reshape(-1))	# rel_scores shape (1,9,9,5), rel_mat shape(1,9,9), rel_loss shape (81,)
 			# tag index 0 for 'None'
 			# rel_mask = (rel_mat>0)*binary_mask
@@ -1185,7 +1177,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 
 				# if self.debug:
 				#   if rel_loss<0 or arc_loss<0:
-				#       pdb.set_trace()
 				#=============================================================================================
 			else:
 				arc_scores, arcs = arc_scores[mask], arcs[mask]
@@ -1213,7 +1204,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 			gold_labels = torch.masked_select(rel_mat, binary_mask_l)
 			candidate_ner_scores = s_rel.reshape(-1, self.tagset_size)[flattened_candidate_scores_mask==True]
 			loss = self.rel_criterion(input=candidate_ner_scores, target=gold_labels).sum()
-			# pdb.set_trace()
 		return loss
 
 	def evaluate(
@@ -1250,18 +1240,15 @@ class SemanticDependencyParser1(flair.nn.Model):
 					arc_scores, rel_scores = self.forward(batch)
 					# for score in rel_scores:
 					# 	print(score[0,0])
-					# pdb.set_trace()
 					mask=self.mask
 					root_mask = mask.clone()
 					#--------------20200716-ner_dp-----------------------
 					# root_mask[:,0] = 0
 					# B * max_len * max_len
-					# pdb.set_trace()
 					binary_mask = root_mask.unsqueeze(-1) * mask.unsqueeze(-2)
 					binary_mask = torch.tril(binary_mask, diagonal=0)
 					if self.factorize:
 						arc_predictions = (arc_scores.sigmoid() > 0.5) * binary_mask
-					# pdb.set_trace() 
 					# rel_predictions = (rel_scores.softmax(-1)*binary_mask.unsqueeze(-1)).argmax(-1)
 					rel_predictions = rel_scores.argmax(-1)*binary_mask
 					if not prediction_mode:
@@ -1327,7 +1314,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 
 							#=========================================================
 							if self.tag_type == 'ner_dp':
-								# pdb.set_trace()
 								rel_preds = self.decode_ner_dp(arc_scores, rel_scores, self.mask)	# spans list (s, e, label_index)
 								rel_gold_nonzeros_batch = rel_mat.permute(0,2,1).nonzero()	# batch_size * n_nonzero * 2(coordination), entry: label coordination in rel_mat(end, start)
 								for coordination in rel_gold_nonzeros_batch:
@@ -1353,20 +1339,17 @@ class SemanticDependencyParser1(flair.nn.Model):
 							eval_loss /= batch_no
 
 					if out_path is not None:
-						# pdb.set_trace()
 						# if self.target
 						# lengths = [len(sentence.tokens) for sentence in batch]
 						
 						# temp_preds = eisner(arc_scores, mask)
 						# -----------------for ner_dp-----------------
 						if self.tag_type == 'ner_dp':
-							# pdb.set_trace()
 							rel_preds = self.decode_ner_dp(arc_scores, rel_scores, self.mask)
 							for sent_idx, sentence in enumerate(batch):
 								pred_spans = rel_preds[sent_idx]	#list of spans, span formation: (s, e, label_idx)
 
 								labels = ['O' for _ in sentence]
-								# pdb.set_trace()
 								for span in pred_spans:
 									s, e, t = span
 									label = str(self.tag_dictionary.idx2item[t].decode('utf-8'))
@@ -1398,7 +1381,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 									preds=temp_preds[sent_idx]
 
 								for token_idx, token in enumerate(sentence):
-									# pdb.set_trace()
 									if token_idx == 0:
 										continue
 									
@@ -1587,7 +1569,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 
 		top_spans = [sorted(top_span,reverse=True,key=lambda x:x[3]) for top_span in top_spans] # 对于每个句子中的所有spans，按分数降序排序
 		sent_pred_mentions = [[] for _ in range(n_sentences)]
-		# pdb.set_trace()
 		for sid, spans in enumerate(top_spans):
 			for ns,ne,t,_ in spans:
 				for ts,te,_ in sent_pred_mentions[sid]:   # ts, te 是之前记录的span start/end position，ns, ne必须与所有的 ts,te相容。
@@ -1700,15 +1681,12 @@ class SemanticDependencyParser1(flair.nn.Model):
 			"""
 			calculate lse score of I-tag
 			"""
-			# pdb.set_trace()
 			
 			if n>2:
 				cum = {}
 				for role in Roles:
 					# if role == b'ORG':
-					# 	pdb.set_trace()
 					cum[(2,2,role)] = sum([_exp(score_ij[(1,v,role)]) for v in range(3,n+1)])
-					# pdb.set_trace()
 					for i in range(2,n-1):
 						sum1 = sum([_exp(score_ij[(u,i+1,role)]) for u in range(1,i)])
 						sum2 = sum([_exp(score_ij[(i,v,role)]) for v in range(i+2, n+1)])
@@ -1819,7 +1797,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 		# pfb = _lse(pfb_lse_list)
 		# # pdb.set_trace()
 		# assert abs((math.exp(pf)-math.exp(pfb))/math.exp(pf)) < 1e-5
-		# 	pdb.set_trace()
 		# print('Partition function is: {}, {}'.format(pf, pfb))
 		#------------------------------------
 		# caculate scores for BIOES tags in sequence model
@@ -1877,7 +1854,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 		# 	# assert ((s-math.exp(pf))/math.exp(pf)) < 1e-12,'score sum not equal to partition function'
 		# 	if abs((s-math.exp(pf))/math.exp(pf)) > 1e-5:
 		# 		# print(score_sum)
-		# 		pdb.set_trace()
 		# {b'<unk>': 0, b'O': 1, b'B-PER': 2, b'E-PER': 3, b'S-LOC': 4, b'B-MISC': 5, b'I-MISC': 6, b'E-MISC': 7, b'S-MISC': 8, b'S-PER': 9, b'B-ORG': 10, b'E-ORG': 11, b'S-ORG': 12, b'I-ORG': 13, b'B-LOC': 14, b'E-LOC': 15, b'I-PER': 16, b'I-LOC': 17, b'<START>': 18, b'<STOP>': 19}
 		student_tags_map = student_tag_dictionary.item2idx	
 		bioes_prob_sent = torch.zeros(size=(n, len(student_tags_map)))
@@ -1897,7 +1873,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 					try:
 						Z += _exp(DPC[key]/T)
 					except:
-						pdb.set_trace()
 			# partition_functions[m-1] = float(Z)
 			prob = max(float(_exp(DPC[(O, m)]/T)/Z), 0)
 
@@ -1909,7 +1884,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 					bioes_prob_sent[m-1, tag_indices[prefix, role]] = prob
 		# pfs = partition_functions/partition_functions.mean() - 1
 		# if (abs(pfs)<1e-2).sum()<n:
-		# 	pdb.set_trace()
 
 		return bioes_prob_sent
 
@@ -1991,9 +1965,7 @@ class SemanticDependencyParser1(flair.nn.Model):
 				cum = {}
 				for role in Roles:
 					# if role == b'ORG':
-					# 	pdb.set_trace()
 					cum[(2,2,role)] = sum([_exp(score_ij[(1,v,role)]) for v in range(3,n+1)])
-					# pdb.set_trace()
 					for i in range(2,n-1):
 						sum1 = sum([_exp(score_ij[(u,i+1,role)]) for u in range(1,i)])
 						sum2 = sum([_exp(score_ij[(i,v,role)]) for v in range(i+2, n+1)])
@@ -2093,7 +2065,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 		pf = _lse([DPF[(n, F)]] + [DPF[(n,role)] for role in Roles])
 		pfb = _lse([DPB[(1,F)]] + [DPB[(1,role)] for role in Roles])
 		# if abs((pf-pfb)/pf)>1e-1:
-		# 	pdb.set_trace()
 
 
 		#------------------------------------
@@ -2164,7 +2135,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 
 						bioes_prob_sent[m-1, tag_indices[(prefix, role)]] = prob
 			except:
-				pdb.set_trace()
 
 
 		return bioes_prob_sent
@@ -2174,7 +2144,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 		"""
 		sent_scores: score for a sentence, [batch, head, tail, role]
 		"""
-		# pdb.set_trace()
 		import math
 		from decimal import Decimal 
 		sent_scores = sent_scores.detach().cpu()
@@ -2206,14 +2175,12 @@ class SemanticDependencyParser1(flair.nn.Model):
 			
 
 		def _exp_score(head, tail, role):
-			# pdb.set_trace()
 			# exp_sent_score = _dec(sent_scores[head-1, tail-1, role2id[role]].item())
 			# exp_sent_score = sent_score.exp()
 			return _dec(sent_scores[head-1, tail-1, role2id[role]].item()).exp()
 
 		# aux function for calculating of prefix 'I'
 		def _score_ij(sent_scores, DPF, DPB):
-			# pdb.set_trace()
 			score_ij = {}
 			for role in Roles:
 				for i in range(1, n-1):
@@ -2223,7 +2190,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 
 		def _DPI(score_ij, DPC):
 			#intial
-			# pdb.set_trace()
 			cum = {}
 			for role in Roles:
 				cum[(1,1,role)] = _dec(0)
@@ -2703,7 +2669,6 @@ class SemanticDependencyParser1(flair.nn.Model):
 	# 		prob = float(math.exp(DPC[(O, m)]/T)/Z)
 	# 		if prob<0:
 	# 			if abs(prob)>1e-12:
-	# 				pdb.set_trace()
 	# 			else:
 	# 				prob = 0 
 	# 		bioes_prob_sent[m-1, student_tags_map[b'O']] = prob
@@ -2712,9 +2677,7 @@ class SemanticDependencyParser1(flair.nn.Model):
 	# 				prob = float(math.exp(DPC[(prefix, role, m)]/temperature)/Z)
 	# 				if prob<0:
 	# 					if abs(prob)>1e-12:
-	# 						pdb.set_trace()
 	# 					else:
 	# 						prob = 0 
 	# 				bioes_prob_sent[m-1, tag_indices[prefix, role]] = prob
-	# 	pdb.set_trace()
 	# 	return bioes_prob_sent

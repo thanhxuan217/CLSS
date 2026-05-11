@@ -13,7 +13,6 @@ import flair.ner_dp_utils as utils
 from flair.ner_dp_utils import get_shape, train_dataloader, eval_dataloader
 
 
-import pdb
 
 
 class BiaffineNERModel(nn.Module):
@@ -93,14 +92,12 @@ class BiaffineNERModel(nn.Module):
 		context_emb_list.append(context_word_emb)
 
 		#TODO add char_emb
-		# pdb.set_trace()
 		char_emb = self.char_embbedings(torch.as_tensor(char_index, device=self.device, dtype=torch.int64))
 		_, _, max_char_len, self.char_emb_size = char_emb.shape
 		flattened_char_emb = char_emb.reshape([n_sentences * max_sentence_length, max_char_len, self.char_emb_size]).transpose_(1,2)	# n_words, max_word_len, char_emb_size (N, L, C)->(N, C, L)
 		flattened_aggregated_char_emb = self.char_emb_cnn(flattened_char_emb)
 		aggregated_char_emb = flattened_aggregated_char_emb.reshape(n_sentences, max_sentence_length, flattened_aggregated_char_emb.shape[1])
 		context_emb_list.append(aggregated_char_emb)
-		# pdb.set_trace()
 		context_emb = torch.cat(context_emb_list, 2)
 		context_emb = self.lexical_Dropout(context_emb)
 
@@ -108,7 +105,6 @@ class BiaffineNERModel(nn.Module):
 		candidate_scores_mask = torch.triu(candidate_scores_mask, diagonal=0)
 		flattened_candidate_scores_mask = candidate_scores_mask.view(-1)
 
-		# pdb.set_trace()
 		#----------through rnn------------
 		pack = pack_padded_sequence(context_emb, text_len, batch_first=True, enforce_sorted=False)
 		pack, _ = self.rnn(pack)
@@ -122,7 +118,6 @@ class BiaffineNERModel(nn.Module):
 		
 		candidate_ner_scores = self.bilinear(candidate_starts_emb, candidate_end_emb)
 		candidate_ner_scores = candidate_ner_scores.reshape(-1,self.num_types+1)[flattened_candidate_scores_mask==True]
-		# pdb.set_trace()
 		if is_train:
 			loss = self.criterion(input=candidate_ner_scores, target=gold_labels)
 			loss = loss.sum()
@@ -165,7 +160,6 @@ class BiaffineNERModel(nn.Module):
 						break
 				else:
 					sent_pred_mentions[sid].append((ns,ne,t))
-		# pdb.set_trace()
 		pred_mentions = set((sid,s,e,t) for sid, spr in enumerate(sent_pred_mentions) for s,e,t in spr)
 		return pred_mentions
 
@@ -180,14 +174,12 @@ class BiaffineNERModel(nn.Module):
 	# 	elif datatype=='eval':
 	# 		self.eval_dataloader = eval_dataloader(config)
 	# 	else:
-	# 		pdb.set_trace()
 		
 	# def step(self):
 	# 	if self.batch_len is not None:
 	# 		batch = self.train_dataloader[self.global_step%self.batch_len]
 	# 		loss_step = self.forward(batch)
 	# 	else:
-	# 		pdb.set_trace()
 	# 	self.global_step += 1
 
 
@@ -209,7 +201,6 @@ class BiaffineNERModel(nn.Module):
 			batch_tensor, batch_data = batch
 			# tokens, context_word_emb, char_index, text_len, gold_labels = batch_tensor
 
-			# pdb.set_trace()
 			_, candidate_ner_scores = self.forward(batch, is_train=False) # (439, 8)
 
 			num_words += sum(len(tok) for tok in batch_data['sentences'])
@@ -295,7 +286,6 @@ class Sparse_dropout(nn.Module):
 		shapes = input.shape
 		noise_shape = list(noise_shape)
 		broadcast_dims = []
-		# pdb.set_trace()
 		for idx, dim_pair in enumerate(zip(shapes, noise_shape)):
 			if dim_pair[1]>1:
 				broadcast_dims.append((idx, dim_pair[0]))
@@ -318,7 +308,6 @@ class bilinear_classifier(nn.Module):
 		# self.batch_size = batch_size
 		# self.bucket_size = bucket_size
 		# self.input_size = input_size
-		# pdb.set_trace()
 		# self.dropout_rate = 0
 		self.dropout_rate = dropout
 		self.output_size = output_size
@@ -414,19 +403,16 @@ class ffnn(nn.Module):
 		if self.initializer == None:
 			torch.nn.init.xavier_uniform_(self.weights, gain=1)
 		else:
-			# pdb.set_trace()
 			self.initializer(self.weights, gain=1)
 		nn.init.zeros_(self.bias)
 
 	def forward(self, inputs):
-		# pdb.set_trace()
 		current_inputs = inputs
 		if len(get_shape(inputs))==3:
 			batch_size, seqlen, emb_size = get_shape(inputs)
 			current_inputs = inputs.reshape(batch_size*seqlen, emb_size)
 		emb_size = get_shape(current_inputs)[-1]
 		# if emb_size != self.emb_size:
-		# 	pdb.set_trace()
 		assert emb_size==self.emb_size,'last dim of input does not match this layer'
 		
 		# if self.dropout is not None or self.dropout > 0:
@@ -499,7 +485,6 @@ class BiLSTM_1(nn.Module):
 			else:
 				hx_n.append([h[batch_size:] for h in hx_i])
 				hx_i = [h[:batch_size] for h in hx_i]
-			# pdb.set_trace()
 			hx_i = [h for h in cell(x[t], hx_i)]
 			output.append(hx_i[0])
 			# if self.training:
@@ -510,21 +495,18 @@ class BiLSTM_1(nn.Module):
 		else:
 			hx_n.append(hx_i)
 			hx_n = [torch.cat(h) for h in zip(*reversed(hx_n))]
-		# pdb.set_trace()
 		output = torch.cat(output)
 
 		return output, hx_n
 
 
 	def forward(self, sequence, hx=None):
-		# pdb.set_trace()
 		x, batch_sizes = sequence.data, sequence.batch_sizes.tolist()
 		
 		batch_size = batch_sizes[0]
 		h_n, c_n = [], []
 
 		if hx is None:
-			# pdb.set_trace()
 			
 			h = self.f_cells[0].initial_state[0].repeat([batch_size, 1])
 			c = self.f_cells[0].initial_state[1].repeat([batch_size, 1])
@@ -559,7 +541,6 @@ class BiLSTM_1(nn.Module):
 			text_outputs = self.dropout(text_outputs)
 
 			if i > 0:
-				# pdb.set_trace()
 				highway_gates = torch.sigmoid(self.mlp(text_outputs))
 				text_outputs = highway_gates*text_outputs + (1-highway_gates)*current_input
 			x = text_outputs
@@ -623,10 +604,8 @@ class LstmCell(nn.Module):
 
 	def _orthonormal_initializer(self, weights, gain=1.0):
 		if len(weights.shape)>2:
-			pdb.set_trace()
 		device = weights.device
 		dtype = weights.dtype
-		# pdb.set_trace()
 		shape0, shape1 = get_shape(weights)
 		M1 = torch.randn(size=(shape0, shape0), dtype=dtype, device=device)
 		M2 = torch.randn(size=(shape1, shape1), dtype=dtype, device=device)
@@ -651,7 +630,6 @@ class LstmCell(nn.Module):
 			
 			
 			with torch.no_grad():
-				# pdb.set_trace()
 				q_list = [initializer(a, gain) for a in torch.split(weights,split_size_or_sections=output_sizes, dim=1)]
 				q = torch.cat(q_list, axis=1)
 				weights.view_as(q).copy_(q)
@@ -678,7 +656,6 @@ class cnn(nn.Module):
 	
 	def forward(self, input):
 		outputs = []
-		# pdb.set_trace()
 		for i in range(self.num_layers):
 			output = self.conv_layers[i](input)	# (n_words, n_chars-filter_size+1, n_filters)
 			pooled = torch.max(output, dim=2)[0]	# channel is dim1.

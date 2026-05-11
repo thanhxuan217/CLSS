@@ -1,0 +1,50 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.swp
+*.swo
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── ML Artifacts ──────────────────────────────────────────────────────────────
+*.pkl
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# ── Data & Models (large files — keep paths, not content) ─────────────────────
+data/
+models/
+embeddings/
+logs/
+outputs/
+results/
+resources/taggers/*.pkl
+resources/taggers/*.pt
+
+# ── MinHash Index files ────────────────────────────────────────────────────────
+*.minhash_index
+data/index/
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.code-workspace
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── Archive (old backup directory — kept locally, not in git) ─────────────────
+utils/

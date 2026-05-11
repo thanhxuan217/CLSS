@@ -22,7 +22,6 @@ from .biaffine_attention import BiaffineAttention
 from tqdm import tqdm
 from tabulate import tabulate
 import numpy as np
-import pdb
 import copy
 
 from ..variational_inference import MFVI
@@ -100,7 +99,6 @@ class ParallelSequenceTagger(FastsequenceTagger):
                 teacher_hidden=teacher_hidden,
                 config=state['config'],
             )
-        # pdb.set_trace()
         model.load_state_dict(state["state_dict"])
         return model
 
@@ -130,7 +128,6 @@ class ParallelSequenceTagger(FastsequenceTagger):
         max_len = features.shape[1]
         mask=self.mask
         if self.distill_posterior:
-            # pdb.set_trace()
             # student forward-backward score
             forward_var = self._forward_alg(features, lengths, distill_mode=True)
             backward_var = self._backward_alg(features, lengths)
@@ -140,7 +137,6 @@ class ParallelSequenceTagger(FastsequenceTagger):
             # teacher forward-backward score
             teacher_scores = torch.stack([sentence.get_teacher_posteriors() for sentence in data_points],0)
             posterior_loss = 0
-            # pdb.set_trace()
             for i in range(teacher_scores.shape[-2]):
                 posterior_loss += self._calculate_distillation_loss(forward_backward_score, teacher_scores[:,:,i], mask)
             posterior_loss/=teacher_scores.shape[-2]
@@ -171,24 +167,20 @@ class ParallelSequenceTagger(FastsequenceTagger):
             feature_scores=features_input.unsqueeze(-2)
             # crf_scores = feature_scores + self.transitions.view(1, 1, self.tagset_size, self.tagset_size)
             
-            # pdb.set_trace()
             # features_input = torch.rand_like(features_input).cuda()
             forward_score = self._forward_alg(features_input, lengths_input)
             gold_score = self._score_sentence(features_input, tags, lengths_input, mask_input)
             distillation_loss=forward_score-gold_score
-            # pdb.set_trace()
             if self.crf_attention:
                 teacher_atts=torch.stack([sentence.get_teacher_weights() for sentence in data_points],0)
                 att_nums=sum([len(sentence._teacher_weights) for sentence in data_points])
                 
                 if self.distill_with_gold:
                     # [batch, length]
-                    # pdb.set_trace()
                     tag_list=torch.stack([getattr(sentence,self.tag_type+'_tags').to(flair.device) for sentence in data_points],0).long()
                     comparison=((teacher_tags-tag_list.unsqueeze(-1))!=0).float()*mask.unsqueeze(-1)
                     num_error=comparison.sum(1)
                     if self.exp_score:
-                        # pdb.set_trace()
                         score_weights=torch.exp(-num_error/self.gold_const)
                     else:
                         score_error=num_error+self.gold_const
@@ -214,28 +206,23 @@ class ParallelSequenceTagger(FastsequenceTagger):
                     teacher_features = torch.stack([sentence.get_professor_teacher_prediction(professor_interpolation=professor_interpolation) for sentence in data_points],0)
                 elif self.biaf_attention:
                     teacher_sentfeats = torch.stack([sentence.get_teacher_sentfeats() for sentence in data_points],0)
-                    # pdb.set_trace()
                     if self.token_level_attention:
                         try:
                             teacher_attention = self.biaffine(self.sent_feats.view(-1,self.sent_feats.shape[-1]),teacher_sentfeats.view(-1,teacher_sentfeats.shape[-2],teacher_sentfeats.shape[-1]))
                         except:
-                            pdb.set_trace()
                         teacher_attention = teacher_attention.view(len(features),max_len,-1)
                         teacher_features = torch.stack([sentence.get_teacher_prediction(pooling='token_weighted', weight=teacher_attention[idx]) for idx,sentence in enumerate(data_points)],0)
                     else:    
                         teacher_attention = self.biaffine(self.sent_feats,teacher_sentfeats)
                         teacher_features = torch.stack([sentence.get_teacher_prediction(pooling='weighted', weight=teacher_attention[idx]) for idx,sentence in enumerate(data_points)],0)
-                    # pdb.set_trace()
                     
                     # teacher_attention.expand()
                 else:
                     teacher_features = torch.stack([sentence.get_teacher_prediction() for sentence in data_points],0)
-                # pdb.set_trace()
             distillation_loss = self._calculate_distillation_loss(features, teacher_features, mask, teacher_is_score=not self.distill_prob)
         target_loss = self._calculate_loss(features, data_points, mask)
         # target_loss2 = super()._calculate_loss(features,data_points)
         # distillation_loss2 = super()._calculate_distillation_loss(features, teacher_features,torch.tensor(lengths))
-        # pdb.set_trace()
         return interpolation * (posterior_loss + distillation_loss) + (1-interpolation) * target_loss
     def sequence_mask(self, lengths, max_len=None):
         """
@@ -308,7 +295,6 @@ class ParallelSequenceTagger(FastsequenceTagger):
                 score = score.sum()/mask.sum()
         if self.posterior_constraint:
             # student forward-backward score
-            # pdb.set_trace()
             forward_var = self._forward_alg(features, lengths, distill_mode=True)
             backward_var = self._backward_alg(features, lengths)
             # forward_var = self.forward_var
@@ -320,7 +306,6 @@ class ParallelSequenceTagger(FastsequenceTagger):
             else:
                 posterior_score = posterior_score.sum()/mask.sum()
             
-            # pdb.set_trace()
             score = (1-self.posterior_interpolation) * score + self.posterior_interpolation * posterior_score
         return score
     def _score_sentence(self, feats, tags, lens_,mask=None):

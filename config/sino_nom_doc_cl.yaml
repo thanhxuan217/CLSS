@@ -33,8 +33,8 @@ model:
 embeddings:
   TransformerWordEmbeddings-0:
     # Thay bằng model Sino-Nom riêng nếu có
-    # Ví dụ: hfl/chinese-roberta-wwm-ext hoặc bert-base-chinese
-    model: bert-base-chinese
+    # Ví dụ: bert-base-chinese hoặc hfl/chinese-roberta-wwm-ext
+    model: SIKU-BERT/sikubert
     fine_tune: true
     layers: '-1'
     pooling_operation: first
@@ -105,7 +105,7 @@ interpolation: 0.5
 
 # ─── Output ───────────────────────────────────────────────────────────────────
 target_dir: resources/taggers/
-model_name: bert-base-chinese_10epoch_4batch_4accumulate_5e-5lr_sino_nom_punct_crf_multiview_posterior_minhash_rag
+model_name: sikubert_10epoch_4batch_4accumulate_5e-5lr_sino_nom_punct_crf_multiview_posterior_minhash_rag
 
 # ─── MFVI (Message Passing Variational Inference — tắt mặc định) ──────────────
 MFVI:

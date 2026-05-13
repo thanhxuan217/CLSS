@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
-import pdb
 
 class TrilinearScorer(nn.Module):
     """
@@ -74,7 +73,6 @@ class TrilinearScorer(nn.Module):
             # layer = torch.einsum('nkc,nijc->nijk', layer3, layer12_temp)
         else:
             # layer = torch.einsum('nia,njb,nkc,al,bl,cl->nijk', layer1, layer2, layer3, self.W_1, self.W_2, self.W_3)
-            # pdb.set_trace()
             # layer = torch.einsum('nia,al,njb,bl,nkc,cl->nijk', layer1, self.W_1, layer2, self.W_2, layer3, self.W_3)
             # nia * al -> nil * bl -> nibl * njb -> nijl * cl -> nijc * nkc -> nijk
             layer = torch.einsum('al,nia,bl,njb,cl,nkc->nijk', self.W_1, layer1, self.W_2, layer2, self.W_3, layer3)

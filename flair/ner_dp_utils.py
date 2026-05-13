@@ -18,7 +18,6 @@ import pyhocon
 
 
 
-import pdb
 
 def initialize_from_env():
   name = sys.argv[1]
@@ -187,7 +186,6 @@ class prepared_dataloader():
 			with open(self.config[pathname]) as f:
 				self.examples = [json.loads(jsonline) for jsonline in f.readlines()]
 		else:
-			pdb.set_trace()
 
 		self.ner_types = self.config['ner_types']
 		self.ner_maps = {ner: (i + 1) for i, ner in enumerate(self.ner_types)}
@@ -200,7 +198,6 @@ class prepared_dataloader():
 				batch = (self.tensorize_example(example), example)
 				batches.append(batch)
 		else:
-			pdb.set_trace()
 		return batches
 	@property
 	def model_sizes(self):
@@ -222,7 +219,6 @@ class prepared_dataloader():
 			lemmas = example["lemmas"]
 		for i, sentence in enumerate(sentences):
 			for j, word in enumerate(sentence):
-				# pdb.set_trace()
 				tokens[i][j] = word
 				if self.context_embeddings.is_in_embeddings(word):
 					context_word_emb[i, j] = self.context_embeddings[word]

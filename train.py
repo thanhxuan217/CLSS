@@ -18,7 +18,6 @@ from flair.utils.from_params import Params
 # from flair.trainers import ModelDistiller
 # from flair.trainers import ModelFinetuner
 from flair.config_parser import ConfigParser
-import pdb
 import sys
 import os
 import logging
@@ -79,9 +78,7 @@ if args.test and args.zeroshot:
 		print()
 		exit()
 
-# pdb.set_trace()
 config = ConfigParser(config,all=args.all,zero_shot=args.zeroshot,other_shot=args.other,predict=args.predict)
-# pdb.set_trace()
 
 
 student=config.create_student(nocrf=args.nocrf)
@@ -94,7 +91,6 @@ if 'is_teacher_list' in config.config:
 	if config.config['is_teacher_list']:
 		teacher_func=config.create_teachers_list
 
-# pdb.set_trace()
 if 'trainer' in config.config:
 	trainer_name=config.config['trainer']
 else:
@@ -122,7 +118,6 @@ elif not args.parse:
 else:
 	trainer: trainer_func = trainer_func(student, None, corpus, config=config.config, **config.config[trainer_name], is_test=args.test)
 
-# pdb.set_trace()
 
 train_config=config.config['train']
 train_config['base_path']=config.get_target_path
@@ -132,13 +127,11 @@ eval_mini_batch_size = int(config.config['train']['mini_batch_size'])
 # if args.parse or args.test:
 #   if 'sentence_level_batch' in config.config[trainer_name] and config.config[trainer_name]['sentence_level_batch']:
 #       eval_mini_batch_size = 2000
-# pdb.set_trace()
 if int(args.batch_size)>0:
 	eval_mini_batch_size = int(args.batch_size)
 
 if args.test_speed:
 	student.eval()
-	# pdb.set_trace()
 	print(count_parameters(student))
 	# for embedding in student.embeddings.embeddings:
 	# 	embedding.training = False
@@ -201,7 +194,6 @@ elif args.parse or args.save_embedding:
 				if 'elmo' in embedding.name:
 					# embedding.reset_elmo()
 					# continue
-					# pdb.set_trace()
 					embedding.ee.elmo_bilm.cuda(device=embedding.ee.cuda_device)
 					states=[x.to(flair.device) for x in embedding.ee.elmo_bilm._elmo_lstm._states]
 					embedding.ee.elmo_bilm._elmo_lstm._states = states
@@ -223,7 +215,6 @@ elif args.parse or args.save_embedding:
 			if '.' not in name:
 				if type(getattr(student, name))==torch.nn.parameter.Parameter:
 					setattr(student, name, torch.nn.parameter.Parameter(getattr(student,name).to(flair.device)))
-		# pdb.set_trace()
 		
 	if args.save_embedding:
 		for embedding in student.embeddings.embeddings:
@@ -319,7 +310,7 @@ elif args.parse or args.save_embedding:
 				if student.tag_type=='dependency':
 					corpus=datasets.UniversalDependenciesCorpus(tar_dir,add_root=True,spliter=args.spliter)
 				else:
-					corpus=datasets.ColumnCorpus(tar_dir, column_format={0: 'text', 1:'ner'}, tag_to_bioes='ner')
+					corpus=datasets.ColumnCorpus(tar_dir, column_format={0: 'text', 1: student.tag_type}, tag_to_bioes=None)
 				tar_file_name = tar_dir.split('/')[-1]
 				print('Parsing the file: '+tar_file_name)
 				write_name='outputs/train.'+config.config['model_name']+'.'+tar_file_name+'.conllu'
@@ -334,7 +325,7 @@ elif args.parse or args.save_embedding:
 			if student.tag_type=='dependency' or student.tag_type=='enhancedud':
 				corpus=datasets.UniversalDependenciesCorpus(args.target_dir,add_root=True,spliter=args.spliter)
 			else:
-				corpus=datasets.ColumnCorpus(args.target_dir, column_format={0: 'text', 1:'ner'}, tag_to_bioes='ner')
+				corpus=datasets.ColumnCorpus(args.target_dir, column_format={0: 'text', 1: student.tag_type}, tag_to_bioes=None)
 			tar_file_name = str(Path(args.target_dir)).split('/')[-1]
 			loader=ColumnDataLoader(list(corpus.train),eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
 			loader.assign_tags(student.tag_type,student.tag_dictionary)

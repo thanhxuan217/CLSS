@@ -10,7 +10,6 @@ import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.optim.sgd import SGD
 from torch.utils.data.dataset import ConcatDataset
-import pdb
 try:
     from apex import amp
 except ImportError:

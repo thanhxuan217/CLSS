@@ -18,7 +18,6 @@ import argparse
 import yaml
 from .utils.from_params import Params
 from . import logging
-import pdb
 import copy
 log = logging.getLogger("flair")
 
@@ -26,25 +25,10 @@ from flair.corpus_mapping import corpus_map,reverse_corpus_map
 dependency_tasks={'enhancedud', 'dependency', 'srl', 'ner_dp'}
 class ConfigParser:
 	def __init__(self, config, all=False, zero_shot=False, other_shot=False, predict=False):
-		self.full_corpus={'ner':'CONLL_03_GERMAN:CONLL_03:CONLL_03_DUTCH:CONLL_03_SPANISH', 'upos':'UD_GERMAN:UD_ENGLISH:UD_FRENCH:UD_ITALIAN:UD_DUTCH:UD_SPANISH:UD_PORTUGUESE:UD_CHINESE'}
-		# self.zeroshot_corpus={'ner':'PANX-TA:PANX-SL:PANX-PT:PANX-ID:PANX-HE:PANX-FR:PANX-FA:PANX-EU', 'upos':'UD_BASQUE:UD_DUTCH:UD_ARABIC:UD_RUSSIAN:UD_KOREAN:UD_CHINESE:UD_HINDI:UD_FINNISH'}
+		self.full_corpus={}
 		self.zeroshot_corpus={}
-		for key in corpus_map:
-			self.zeroshot_corpus[key]=':'.join(corpus_map[key].values())
-		self.zeroshot_corpus['ner']='PANX-SV:PANX-FR:PANX-RU:PANX-PL:PANX-VI:PANX-JA:PANX-ZH:PANX-AR:PANX-PT:PANX-UK:PANX-FA:PANX-CA:PANX-SR:PANX-NO:PANX-ID:PANX-KO:PANX-FI:PANX-HU:PANX-SH:PANX-CS:PANX-RO:PANX-EU:PANX-TR:PANX-MS:PANX-EO:PANX-HY:PANX-DA:PANX-CE:PANX-HE:PANX-SK:PANX-KK:PANX-HR:PANX-ET:PANX-LT:PANX-BE:PANX-EL:PANX-SL:PANX-GL'
-		# pdb.set_trace()
-		self.zeroshot_corpus={
-		'ner':'PANX-TA:PANX-EU:PANX-HE:PANX-FA', 
-		# 'ner':'CONLL_03_DUTCH:CONLL_03_SPANISH:CONLL_03:CONLL_03_GERMAN:MIXED_NER-EU:MIXED_NER-FA:MIXED_NER-FI:MIXED_NER-FR:MIXED_NER-HE:MIXED_NER-HI:MIXED_NER-HR:MIXED_NER-ID:MIXED_NER-NO:MIXED_NER-PL:MIXED_NER-PT:MIXED_NER-SL:MIXED_NER-SV:MIXED_NER-TA',
-		# 'ner':'MIXED_NER-EN:MIXED_NER-NL:MIXED_NER-ES:MIXED_NER-DE:MIXED_NER-EU:MIXED_NER-FA:MIXED_NER-FI:MIXED_NER-FR:MIXED_NER-HE:MIXED_NER-HI:MIXED_NER-HR:MIXED_NER-ID:MIXED_NER-JA:MIXED_NER-NO:MIXED_NER-PL:MIXED_NER-PT:MIXED_NER-SL:MIXED_NER-SV:MIXED_NER-TA',
-		'upos':'UD_TURKISH:UD_SWEDISH:UD_SPANISH:UD_SLOVAK:UD_SERBIAN:UD_RUSSIAN:UD_ROMANIAN:UD_PORTUGUESE:UD_POLISH:UD_NORWEGIAN:UD_KOREAN:UD_ITALIAN:UD_HINDI:UD_GERMAN:UD_FINNISH:UD_DUTCH:UD_DANISH:UD_CZECH:UD_CROATIAN:UD_CHINESE:UD_CATALAN:UD_BULGARIAN:UD_BASQUE:UD_ARABIC:UD_HEBREW:UD_JAPANESE:UD_INDONESIAN:UD_PERSIAN:UD_TAMIL',
-		'mixedner':'CONLL_03_DUTCH:CONLL_03_SPANISH:CONLL_03:CONLL_03_GERMAN:MIXED_NER-EU:MIXED_NER-FA:MIXED_NER-FI:MIXED_NER-FR:MIXED_NER-HE:MIXED_NER-HI:MIXED_NER-HR:MIXED_NER-ID:MIXED_NER-NO:MIXED_NER-PL:MIXED_NER-PT:MIXED_NER-SL:MIXED_NER-SV:MIXED_NER-TA',
-		'low10ner':'CONLL_03_DUTCH:CONLL_03_SPANISH:CONLL_03:CONLL_03_GERMAN:LOW10_NER-EU:LOW10_NER-FA:LOW10_NER-FI:LOW10_NER-FR:LOW10_NER-HE:LOW10_NER-HI:LOW10_NER-HR:LOW10_NER-ID:LOW10_NER-NO:LOW10_NER-PL:LOW10_NER-PT:LOW10_NER-SL:LOW10_NER-SV:LOW10_NER-TA',
-		}
-							# 'upos':'UD_TURKISH:UD_SWEDISH:UD_SPANISH:UD_SLOVAK:UD_SERBIAN:UD_RUSSIAN:UD_ROMANIAN:UD_PORTUGUESE:UD_POLISH:UD_NORWEGIAN:UD_KOREAN:UD_ITALIAN:UD_HINDI:UD_GERMAN:UD_FINNISH:UD_DUTCH:UD_DANISH:UD_CZECH:UD_CROATIAN:UD_CHINESE:UD_CATALAN:UD_BULGARIAN:UD_BASQUE:UD_ARABIC'}
-
-		self.othershot_corpus={'ner':'CONLL_03_DUTCH:CONLL_03_SPANISH:CONLL_03:CONLL_03_GERMAN'}
-		self.predict_corpus={'ner':{'en':'PANXPRED-EN','ta':'PANXPRED-TA','fi':'PANXPRED-FI','eu':'PANXPRED-EU','he':'PANXPRED-HE','ar':'PANXPRED-AR','id':'PANXPRED-ID','cs':'PANXPRED-CS','it':'PANXPRED-IT','fa':'PANXPRED-FA','ja':'PANXPRED-JA','sl':'PANXPRED-SL','fr':'`PRED-FR'}}
+		self.othershot_corpus={}
+		self.predict_corpus={}
 		self.config = config
 		self.mini_batch_size=self.config['train']['mini_batch_size']
 
@@ -97,12 +81,10 @@ class ConfigParser:
 				self.corpus._train = ConcatDataset(self.corpus.train_list+self.unlabeled_corpus.train_list)
 				self.corpus.train_list+=self.unlabeled_corpus.train_list
 				self.corpus.targets+=self.unlabeled_corpus.targets
-				# pdb.set_trace()
 		self.corpus_list: list[str] = self.config[self.target]['Corpus'].split(':')
 		# keep the consistency of tag dictionary
 		if 'tag_dictionary' in self.config[self.target] and Path(self.config[self.target]['tag_dictionary']).exists():
 			self.tag_dictionary=Dictionary.load_from_file(self.config[self.target]['tag_dictionary'])
-			# pdb.set_trace()
 		else:
 			self.tag_dictionary = self.corpus.make_tag_dictionary(tag_type=self.target)
 			if 'tag_dictionary' in self.config[self.target]:
@@ -144,7 +126,6 @@ class ConfigParser:
 		lemma_map = None
 		postag_map = None
 		for embedding in embeddings:
-			# pdb.set_trace()
 			if isinstance(embeddings[embedding],dict):
 				if 'FastWordEmbeddings' in embedding:
 					embedding_list.append(getattr(Embeddings,embedding.split('-')[0])(**embeddings[embedding],all_tokens=self.tokens))
@@ -192,7 +173,6 @@ class ConfigParser:
 			kwargs['candidates'] = len(config[self.target]['systems'])
 		if crf==False:
 			kwargs['use_crf']=crf
-		# pdb.set_trace()
 		kwargs['embeddings']=embeddings
 		kwargs['tag_type']=self.target
 		kwargs['tag_dictionary']=self.tag_dictionary
@@ -247,7 +227,6 @@ class ConfigParser:
 		return teacher_list
 
 	def create_teachers_list(self,is_professor=False):
-		# pdb.set_trace()
 		teacher_list=[]
 		if is_professor:
 			configs=self.config[self.target]['professors']
@@ -264,7 +243,6 @@ class ConfigParser:
 			teacher_model.to("cpu")
 			teacher_model.targets=corpus_target
 			teacher_list.append(teacher_model)
-		# pdb.set_trace()
 		return teacher_list
 
 	def distill_teachers_prediction(self):
@@ -275,7 +253,6 @@ class ConfigParser:
 		train_data=self.assign_pretrained_teacher_predictions(coupled_train_data)
 		del train_data_teacher
 		del coupled_train_data
-		# pdb.set_trace()
 		return train_data
 	def load_pretrained(self,config):
 		try:
@@ -291,7 +268,6 @@ class ConfigParser:
 	@property
 	def get_corpus(self):
 		corpus_list={'train':[],'dev':[],'test':[]}
-		# pdb.set_trace()
 		for corpus in self.config[self.target]['Corpus'].split(':'):
 			#corpus_list.append(getattr(datasets,corpus)())
 			if 'UD' in corpus and '-' not in corpus and 'enhancedud' != self.target:
@@ -499,12 +475,10 @@ class ConfigParser:
 				corpus_list['test'].append(current_dataset.test)
 				corpus_list['targets'].append('unlabeled'+'-'+config['model_name']+'-'+lang)
 				self.config[self.target]['teachers'][filename]+=':'+'unlabeled'+'-'+config['model_name']+'-'+lang
-				# pdb.set_trace()
 		corpus: ListCorpus = ListCorpus(**corpus_list)
 		return corpus
 	@property
 	def assign_system_prediction(self):
-		# pdb.set_trace()
 		teacher_list=[]
 		configs=self.config[self.target]['systems']
 		log.info(f'System Candidates: {sorted(configs.keys())}')
@@ -529,17 +503,14 @@ class ConfigParser:
 					comment_symbol=None,
 					in_memory=True,
 				)
-			# pdb.set_trace()
 			for idx, corpus_name in enumerate(self.corpus.targets):
 				if self.config[self.target]['systems'][filename] != corpus_name:
 					continue
 				if len(self.corpus.dev_list[idx]) != len(dev):
-					pdb.set_trace()
 				for sentid, sentence in enumerate(self.corpus.dev_list[idx]):
 
 					for tokenid, token in enumerate(sentence):
 						if len(sentence) != len(dev[sentid]):
-							pdb.set_trace()
 						if not hasattr(token, 'system_preds'):
 							token.system_preds=[]
 							token.system_scores=[]
@@ -547,18 +518,15 @@ class ConfigParser:
 						token.system_scores.append(float(dev[sentid][tokenid].tags['score']._value))
 						
 				if len(self.corpus.test_list[idx]) != len(test):
-					pdb.set_trace()
 				for sentid, sentence in enumerate(self.corpus.test_list[idx]):
 
 					for tokenid, token in enumerate(sentence):
 						if len(sentence) != len(test[sentid]):
-							pdb.set_trace()
 						if not hasattr(token, 'system_preds'):
 							token.system_preds=[]
 							token.system_scores=[]
 						token.system_preds.append(test[sentid][tokenid].tags['pred_label']._value)
 						token.system_scores.append(float(test[sentid][tokenid].tags['score']._value))
-		# pdb.set_trace()
 	@property
 	def check_model_corpus_group(self):
 		cfg=self.config['model_name']

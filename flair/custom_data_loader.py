@@ -1,9 +1,7 @@
 import random
 import torch
 
-import pdb
-from pytorch_transformers import (
-	BertTokenizer,)
+from transformers import BertTokenizer
 import re
 
 
@@ -53,7 +51,6 @@ class ColumnDataLoader:
 
 		self.data = self.chunk_batches(data,sort_data=sort_data)
 
-		# pdb.set_trace()
 
 	def __len__(self):
 		return len(self.data)
@@ -86,9 +83,7 @@ class ColumnDataLoader:
 		# sort sentences (roughly) by length for better memory utilization
 		if sort_data:
 			if self.use_bert:
-				# pdb.set_trace()
 				if self.grouped_data:
-					# pdb.set_trace()
 					data = sorted(data, key = lambda x: self.get_subtoken_length(x[0]))
 				else:
 					data = sorted(data, key = lambda x: self.get_subtoken_length(x))
@@ -109,7 +104,6 @@ class ColumnDataLoader:
 					len_val=self.get_subtoken_length(x[0])
 				else:
 					len_val=len(x[0])
-				# pdb.set_trace()
 				# if (len(x[0]) + currentlen > self.batch_size) or len(current) > self.batch_size/10.0:
 				if (len_val + currentlen > self.batch_size):
 					res.append(current)
@@ -253,7 +247,6 @@ class ColumnDataLoader:
 					setattr(batch,'max_sent_len',max_len)
 			for s_id, sentence in enumerate(batch):
 				# get the tags in this sentence
-				# pdb.set_trace()
 				if hasattr(sentence[0],'system_preds'):
 					system_preds=[x.system_preds for x in sentence]
 					system_scores=[x.system_scores for x in sentence]
@@ -261,11 +254,8 @@ class ColumnDataLoader:
 					for val in system_preds:
 						assert num_candiates == len(val)
 					if tag_type == 'enhancedud' or tag_type == 'srl':
-						pdb.set_trace()
 					elif tag_type == 'dependency':
-						pdb.set_trace()
 					else:
-						# pdb.set_trace()
 						gold_preds = [token.get_tag(tag_type).value for token in sentence]
 						tag_template = torch.zeros(max_len, num_candiates,device='cpu')
 						score_template = torch.zeros(max_len, num_candiates,device='cpu')
@@ -279,7 +269,6 @@ class ColumnDataLoader:
 						
 						setattr(sentence,tag_type+'_system_preds',tag_template)
 						setattr(sentence,tag_type+'_system_scores',score_template)
-					# pdb.set_trace()
 
 
 				if tag_type=='enhancedud' or tag_type=='srl':
@@ -299,7 +288,6 @@ class ColumnDataLoader:
 							rel_template[index,headid] = relid
 					# for rel in relations:
 					#     if len(rel)>1:
-					#         pdb.set_trace()
 					setattr(sentence,tag_type+'_arc_tags',arc_template)
 					setattr(sentence,tag_type+'_rel_tags',rel_template)
 				elif tag_type=='dependency':
@@ -317,7 +305,6 @@ class ColumnDataLoader:
 					setattr(sentence,tag_type+'_rel_tags',rel_template)
 				elif tag_type == 'ner_dp':
 					# if len(sentence)==2:
-					# pdb.set_trace()
 		
 					arc_template = torch.zeros([max_len,max_len],device='cpu')
 					rel_template = torch.zeros([max_len,max_len],device='cpu')*tag_dictionary.item2idx[str('None').encode('utf-8')]
@@ -330,7 +317,6 @@ class ColumnDataLoader:
 					arc_template = torch.tril(arc_template, diagonal=0)
 					rel_template = torch.tril(rel_template, diagonal=0)
 
-					# pdb.set_trace()
 					#from sentence span info get gold ner matrix representation. template entry is ner label index.
 					spanlist = sentence.get_spans(tag_type='ner_dp')
 
@@ -338,7 +324,6 @@ class ColumnDataLoader:
 						try:
 							tag_idx = tag_dictionary.item2idx[str(span.tag).encode('utf-8')]
 						except:
-							pdb.set_trace()
 						n_tokens = len(span.tokens)
 						if n_tokens > 1:
 							start_idx = span.tokens[0].idx
@@ -349,8 +334,6 @@ class ColumnDataLoader:
 							arc_template[end_idx-1, start_idx-1] = 1
 							rel_template[end_idx-1, start_idx-1] = tag_idx
 						except:
-							pdb.set_trace()
-					# pdb.set_trace()
 					setattr(sentence,tag_type+'_arc_tags',arc_template)
 					setattr(sentence,tag_type+'_rel_tags',rel_template)
 				else:
@@ -363,7 +346,6 @@ class ColumnDataLoader:
 					tag = torch.tensor(tag_idx, device='cpu')
 					tag_template[:len(sentence)]=tag
 					setattr(sentence,tag_type+'_tags',tag_template)
-			# pdb.set_trace()
 			if tag_type=='enhancedud' or tag_type=='dependency' or tag_type=='srl' or tag_type=='ner_dp':
 				arc_tags=torch.stack([getattr(sentence,tag_type+'_arc_tags') for sentence in batch],0)
 				rel_tags=torch.stack([getattr(sentence,tag_type+'_rel_tags') for sentence in batch],0)
@@ -388,7 +370,6 @@ class ColumnDataLoader:
 		'''
 		for batch in self.data:
 			tag_list: List = []
-			# pdb.set_trace()
 			max_len=-1
 			for sentence in batch:
 				if len(sentence)>max_len:
@@ -425,7 +406,6 @@ class ColumnDataLoader:
 		char_lens = []
 		char_idxs = []
 		for word in sent:
-			# pdb.set_trace()
 			c_id = [char_map.get(char, char_map[unk]) for char in word.text]
 			char_lens.append(len(c_id))
 			c_id += [char_map[unk]] * (max_length - len(c_id))

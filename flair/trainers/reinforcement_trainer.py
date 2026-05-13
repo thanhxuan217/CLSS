@@ -163,7 +163,6 @@ class ReinforcementTrainer(ModelDistiller):
 				self.corpus._dev: FlairDataset = ConcatDataset([data for data in self.corpus.dev_list])		
 				self.corpus._test: FlairDataset = ConcatDataset([data for data in self.corpus.test_list])		
 			# for key in pretrained_file_dict:
-			# pdb.set_trace()
 			for embedding in self.model.embeddings.embeddings:
 				if embedding.name in pretrained_file_dict:
 					self.assign_predicted_embeddings(doc_sentence_dict,embedding,pretrained_file_dict[embedding.name])
@@ -442,7 +441,6 @@ class ReinforcementTrainer(ModelDistiller):
 			self.best_action = training_state['best_action']
 			self.action_dict = training_state['action_dict']
 			baseline_score = training_state['baseline_score']
-			# pdb.set_trace()
 		else:
 			start_episode=0
 			self.action_dict = {}
@@ -507,7 +505,6 @@ class ReinforcementTrainer(ModelDistiller):
 		if curriculum_file is not None:
 			with open(curriculum_file) as f:
 				curriculum = json.loads(f.read())
-		# pdb.set_trace()
 		# self.model.embeddings.to('cpu')
 		self.model.embeddings=self.model.embeddings.to('cpu')
 		with torch.no_grad():
@@ -515,7 +512,6 @@ class ReinforcementTrainer(ModelDistiller):
 				self.gpu_friendly_assign_embedding([batch_loader]+dev_loaders+test_loaders)
 			else:
 				self.gpu_friendly_assign_embedding([batch_loader,dev_loader,test_loader])
-		# pdb.set_trace()
 		
 		try:
 			for episode in range(start_episode,max_episodes):
@@ -699,7 +695,6 @@ class ReinforcementTrainer(ModelDistiller):
 								pass
 						except Exception:
 							traceback.print_exc()
-							pdb.set_trace()
 						torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
 						if len(self.update_params_group)>0:
 							torch.nn.utils.clip_grad_norm_(self.update_params_group, 5.0)
@@ -936,7 +931,6 @@ class ReinforcementTrainer(ModelDistiller):
 				# if save_final_model and not param_selection_mode:
 				#   self.model.save(base_path / "final-model.pt")
 
-				# pdb.set_trace()               
 				log.info(
 					f"================================== End episode {episode + 1} =================================="
 				)
@@ -956,7 +950,6 @@ class ReinforcementTrainer(ModelDistiller):
 							base_reward = np.sign(base_reward)*np.log(np.abs(base_reward)+1)
 						if sqrt_reward:
 							base_reward = np.sign(base_reward)*np.sqrt(np.abs(base_reward))
-						# pdb.set_trace()
 						total_reward_at_each_position = torch.zeros(self.controller.num_actions).float().to(flair.device)
 						for batch in batch_loader:
 
@@ -985,13 +978,11 @@ class ReinforcementTrainer(ModelDistiller):
 						print(self.controller(None))
 						# reward = best_score-baseline_score
 						controller_loss = 0
-						# pdb.set_trace()
 						action_count = 0 
 						average_reward = 0
 						reward_at_each_position = torch.zeros_like(action)
 						count_at_each_position = torch.zeros_like(action)
 						if old_reward:
-							# pdb.set_trace()
 							reward = best_score - baseline_score
 							reward_at_each_position += reward
 						else:
@@ -1013,12 +1004,10 @@ class ReinforcementTrainer(ModelDistiller):
 								if torch.abs(action-prev_action).sum() > 0:
 									action_count+=1
 						# controller_loss=controller_loss/action_count
-						# pdb.set_trace()
 						count_at_each_position[torch.where(count_at_each_position==0)]+=1
 						controller_loss-=(log_prob*reward_at_each_position).sum()
 						# controller_loss-=(log_prob*reward_at_each_position/count_at_each_position).sum()
 						# only update the probability of embeddings that changes the selection compared to previous action
-						# pdb.set_trace()
 						# controller_loss = -(log_prob*reward*torch.abs(action-self.best_action)).sum()
 						if random_search:
 							log.info('================= Doing random search, stop updating the controller =================')
@@ -1028,15 +1017,12 @@ class ReinforcementTrainer(ModelDistiller):
 							print(self.controller.selector)
 							print(self.controller.selector.grad)
 							# print(self.controller.selector - self.controller.selector.grad*self.controller_learning_rate)
-							# pdb.set_trace()
 							controller_optimizer.step()
 							print(self.controller.selector)
 							print("#=================")
-							# pdb.set_trace()
 						
 						log.info(f"After distributions: ")
 						print(self.controller(None))
-						# pdb.set_trace()
 						if best_score >= baseline_score:
 							baseline_score = best_score
 							self.best_action = action
@@ -1055,7 +1041,6 @@ class ReinforcementTrainer(ModelDistiller):
 						log.info(f"State dictionary: {self.action_dict}")
 						log.info('=============================================')
 						
-					# pdb.set_trace()
 					curr_action = tuple(action.cpu().tolist())
 					if curr_action not in self.action_dict:
 						self.action_dict[curr_action] = {}
@@ -1073,7 +1058,6 @@ class ReinforcementTrainer(ModelDistiller):
 								}
 				torch.save(training_state,base_path/'training_state.pt')
 				torch.save(controller_optimizer.state_dict(),base_path/'controller_optimizer_state.pt')
-				# pdb.set_trace()
 
 		except KeyboardInterrupt:
 			log_line(log)
@@ -1086,7 +1070,6 @@ class ReinforcementTrainer(ModelDistiller):
 				log.info("Saving model ...")
 				self.model.save(base_path / "final-model.pt")
 				log.info("Done.")
-		# pdb.set_trace()
 		if self.controller.model_structure is None:
 			print(name_list)
 			print(self.controller(state)>=0.5)
@@ -1158,7 +1141,6 @@ class ReinforcementTrainer(ModelDistiller):
 			sentence_tensor = sentence_tensor.detach()
 			if sample:
 				selection, log_prob = self.controller.sample(sentence_tensor,mask)
-				# pdb.set_trace()
 				selection = selection.to('cpu')
 				log_prob = log_prob.to('cpu')
 				sentences.log_prob = log_prob
@@ -1167,7 +1149,6 @@ class ReinforcementTrainer(ModelDistiller):
 				selection = prediction >= 0.5
 				for idx in range(len(selection)):
 					if selection[idx].sum() == 0:
-						# pdb.set_trace()
 						selection[idx][torch.argmax(prediction[idx])]=1
 						# m_temp = torch.distributions.Bernoulli(one_prob[idx])
 						# selection[idx] = m_temp.sample()
@@ -1188,7 +1169,6 @@ class ReinforcementTrainer(ModelDistiller):
 			if hasattr(sentences,'embedding_mask'):
 				sentences.previous_embedding_mask = sentences.embedding_mask
 			sentences.embedding_mask = selection
-			# pdb.set_trace()
 			distribution=self.controller(sentence_tensor,mask)
 			for sent_id, sentence in enumerate(sentences):
 				if hasattr(sentence,'embedding_mask'):
@@ -1204,7 +1184,6 @@ class ReinforcementTrainer(ModelDistiller):
 				distr_dict[sentence.lang_id].append(distribution[sent_id])
 			
 
-		# pdb.set_trace()
 		for lang_id in lang_dict:
 			print(self.id2corpus[lang_id], (sum(lang_dict[lang_id])/len(lang_dict[lang_id])).tolist())
 			print(self.id2corpus[lang_id], (sum(distr_dict[lang_id])/len(distr_dict[lang_id])).tolist())
@@ -1250,7 +1229,6 @@ class ReinforcementTrainer(ModelDistiller):
 	#       try: 
 	#           assert len(doc_dict[key])==len(sentences_emb)
 	#       except:
-	#           pdb.set_trace()
 	#       for i, sentence in enumerate(doc_dict[key]):
 	#           for token, token_idx in zip(sentence.tokens, range(len(sentence.tokens))):
 	#               word_embedding = sentences_emb[i][token_idx]
@@ -1271,7 +1249,6 @@ class ReinforcementTrainer(ModelDistiller):
 					lens=posterior_lens.copy()
 					targets=posteriors.copy()
 				except:
-					pdb.set_trace()
 			if is_token_att:
 				sentfeats=[x._teacher_sentfeats for x in batch]
 				sentfeats_lens=[len(x[0]) for x in sentfeats]
@@ -1333,7 +1310,6 @@ class ReinforcementTrainer(ModelDistiller):
 								# shape=[max_shape-1,max_shape-1] + list(post_val.shape[2:])
 								shape=[max_shape,max_shape] + list(post_val.shape[2:])
 								# if max_shape==8:
-								#   pdb.set_trace()
 								new_posterior=torch.zeros(shape).type_as(post_val)
 								# remove the root token
 								# new_posterior[:sent_lens[index]-1,:sent_lens[index]-1]=post_val[:sent_lens[index]-1,:sent_lens[index]-1]
@@ -1376,7 +1352,6 @@ class ReinforcementTrainer(ModelDistiller):
 					# lens=[len(x) for x in batch]
 					# posteriors = batch.teacher_features['posteriors']
 					# if max(lens) == posteriors.shape[-1]:
-					#   pdb.set_trace()
 				if (not is_crf and not is_posterior):
 					batch.teacher_features['distributions'] = torch.stack([sentence.get_teacher_prediction() for sentence in batch],0).cpu()
 					if hasattr(self.model, 'distill_factorize') and self.model.distill_factorize:
@@ -1420,7 +1395,6 @@ class ReinforcementTrainer(ModelDistiller):
 				log.info(f"Setting embedding mask to the best action: {self.best_action}")
 				print(name_list)
 		except:
-			pdb.set_trace()
 
 		# Since there are a lot of embeddings, we keep these embeddings to cpu in order to avoid OOM
 		for name, module in self.model.named_modules():

@@ -21,7 +21,6 @@ from .biaffine_attention import BiaffineAttention
 from tqdm import tqdm
 from tabulate import tabulate
 import numpy as np
-import pdb
 import copy
 
 from flair.variational_inference import MFVI
@@ -65,7 +64,6 @@ def log_sum_exp_batch(vecs):
 	maxi = torch.max(vecs, 1)[0]
 	maxi_bc = maxi[:, None].repeat(1, vecs.shape[1])
 	recti_ = torch.log(torch.sum(torch.exp(vecs - maxi_bc), 1))
-	# pdb.set_trace()
 	return maxi + recti_
 
 def log_sum_exp_vb(vec, m_size):
@@ -250,7 +248,6 @@ class SequenceTagger(flair.nn.Model):
 		self.l2_loss_only = l2_loss_only
 
 		
-		# pdb.set_trace()
 
 		# if dropout > 0.0:
 		#   self.dropout = torch.nn.Dropout(dropout)
@@ -289,7 +286,6 @@ class SequenceTagger(flair.nn.Model):
 				else:
 					self.map_linears.append(torch.nn.Linear(embedding.embedding_length, 50))
 					rnn_input_dim+=50
-		# pdb.set_trace()
 		if (self.embedding_selector and not self.use_rl) or self.embedding_attention:
 			if use_gumbel:
 				self.selector = Parameter(
@@ -871,12 +867,10 @@ class SequenceTagger(flair.nn.Model):
 			# #==============debug==============
 			if self.map_embeddings:
 				new_list=[]
-				# pdb.set_trace()
 				for idx, embedding_name in enumerate(sorted(sentences.features.keys())):
 					new_list.append(self.map_linears[idx](sentences.features[embedding_name].to(flair.device)))
 				sentence_tensor = torch.cat(new_list,-1)
 			elif self.embedding_selector:
-				# pdb.set_trace()
 				if self.use_rl:
 					if self.use_embedding_masks:
 						sentence_tensor = [sentences.features[x].to(flair.device) for idx, x in enumerate(sorted(sentences.features.keys()))]
@@ -907,7 +901,6 @@ class SequenceTagger(flair.nn.Model):
 			else:
 				sentence_tensor = torch.cat([sentences.features[x].to(flair.device) for x in sorted(sentences.features.keys())],-1)
 			#==============debug==============
-			# pdb.set_trace()
 			# sentence_tensor = torch.cat([sentence_tensor,torch.zeros_like(sentence_tensor)],-1)
 			# sentence_tensor = torch.cat([sentence_tensor*self.selection[0],torch.zeros_like(sentence_tensor)*self.selection[1]],-1)
 			#==============debug==============
@@ -1045,7 +1038,6 @@ class SequenceTagger(flair.nn.Model):
 				self.sent_feats=self.embeddings.embeddings[0].pooled_output
 		if self.enhanced_crf:
 			if self.debug:
-				pdb.set_trace()
 			self.set_enhanced_transitions(sentences)
 
 		return features
@@ -1193,7 +1185,6 @@ class SequenceTagger(flair.nn.Model):
 			feats, length=vals
 
 			if self.use_crf and not self.predict_posterior:
-				# pdb.set_trace()
 				if self.remove_x:
 					current_mask = self.mask[i].bool().unsqueeze(-1) * torch.ones_like(feats).bool()
 					current_feat = feats.masked_select(current_mask).view(self.mask[i].sum().long(),-1)
@@ -1347,7 +1338,6 @@ class SequenceTagger(flair.nn.Model):
 		if T!=1:
 			transitions = transitions/T
 			feats = feats/T
-		# pdb.set_trace()
 		for i in range(feats.shape[1]):
 
 			emit_score = feats[:, i, :]
@@ -1433,7 +1423,6 @@ class SequenceTagger(flair.nn.Model):
 				emit_score = torch.zeros_like(reversed_feats[:, 0, :])
 			else:
 				emit_score = reversed_feats[:, i-1, :]
-			# pdb.set_trace()
 			tag_var = (
 				emit_score[:, None, :].repeat(1, transitions.shape[2], 1)
 				+ transitions
@@ -1472,7 +1461,6 @@ class SequenceTagger(flair.nn.Model):
 				self.tag_dictionary.get_idx_for_item(START_TAG)
 			]
 		else:
-			# pdb.set_trace()
 			terminal_var = forward_var + bw_transitions[
 				self.tag_dictionary.get_idx_for_item(START_TAG)
 			][None, :].repeat(forward_var.shape[0], 1) + reversed_feats[range(reversed_feats.shape[0]), lens_-1, :]/T
@@ -2010,7 +1998,6 @@ class FastSequenceTagger(SequenceTagger):
 				if self.calculate_l2_loss:
 					masked_representations[i,:masked_lengths[i],:] = selected_representations[i].masked_select(temp_rep_mask[i]).view(masked_lengths[i],-1)
 			except:
-				pdb.set_trace()
 			# masked_tag_list[i,:masked_lengths[i]] = tag_list[i].masked_select(select_mask[i])
 			new_mask[i,:masked_lengths[i]] = select_mask[i].masked_select(select_mask[i])
 		
@@ -2030,7 +2017,6 @@ class FastSequenceTagger(SequenceTagger):
 			try:
 				l2_loss = torch.nn.functional.mse_loss(orig_representations,masked_representations, reduction='none') * new_mask.unsqueeze(-1)
 			except:
-				pdb.set_trace()
 			if self.sentence_level_loss or self.use_crf:
 				l2_loss = l2_loss.sum()/l2_loss.shape[0]/masked_representations.shape[-1]
 			else:
@@ -2039,11 +2025,9 @@ class FastSequenceTagger(SequenceTagger):
 			l2_loss = 0
 		if self.l2_loss_only:
 			return l2_loss
-		# pdb.set_trace()
 		try:
 			assert (new_mask == self.mask).all()
 		except:
-			pdb.set_trace()
 		if self.use_crf:
 			if self.distill_exact:
 				partition_score = self._forward_alg(orig_features, masked_lengths, T=self.temperature)
@@ -2074,7 +2058,6 @@ class FastSequenceTagger(SequenceTagger):
 				else:
 					forward_backward_score=forward_backward_score.view(forward_backward_score.shape[0],forward_backward_score.shape[1],forward_backward_score.shape[2]*forward_backward_score.shape[3])
 				forward_backward_score = forward_backward_score.softmax(-1)
-				# pdb.set_trace()
 				teacher_score = forward_backward_score.detach()
 				teacher_startscore = teacher_startscore.detach()
 				teacher_endscore = teacher_endscore.detach()
@@ -2100,7 +2083,6 @@ class FastSequenceTagger(SequenceTagger):
 				loss = self._calculate_distillation_loss(forward_backward_score, teacher_forward_backward_score, new_mask, T=self.temperature)
 					
 		else:
-			# pdb.set_trace()
 			loss = self._calculate_distillation_loss(orig_features, masked_features, new_mask, T=self.temperature)
 		return loss + l2_loss
 
@@ -2136,13 +2118,11 @@ class FastSequenceTagger(SequenceTagger):
 		else:
 			posterior_loss = 0
 		if self.distill_exact and self.use_crf:
-			# pdb.set_trace()
 			# partition_score is come from log_sum_exp, so we do not need to calculate torch.log(Z)
 			partition_score = self._forward_alg(features,lengths, T=self.temperature)
 			# Score(y_{i-1},y_i)=emission(y_{i})+transition
 			# emission(y_{i}, None) + transition(i, i-1) = score(y_i,y_{i-1})
 			structure_score = features[:,:,:,None] + self.transitions[None,None,:,:]
-			# pdb.set_trace()
 			# structure_score[:,:,self.tag_dictionary.get_idx_for_item(START_TAG),:]=0
 			# structure_score[:,:,:,self.tag_dictionary.get_idx_for_item(START_TAG)]=0
 			# structure_score[:,:,self.tag_dictionary.get_idx_for_item(STOP_TAG),:]=0
@@ -2155,10 +2135,8 @@ class FastSequenceTagger(SequenceTagger):
 			start_score = features[:,0] + self.transitions[None,:,self.tag_dictionary.get_idx_for_item(START_TAG)]
 			
 			end_score = self.transitions[None,self.tag_dictionary.get_idx_for_item(STOP_TAG),:]
-			# pdb.set_trace()
 			# start_score[:,self.tag_dictionary.get_idx_for_item(START_TAG)]=0
 			# start_score[:,self.tag_dictionary.get_idx_for_item(STOP_TAG)]=0
-			# pdb.set_trace()
 			# end_score[:,self.tag_dictionary.get_idx_for_item(START_TAG)]-=end_score[:,self.tag_dictionary.get_idx_for_item(START_TAG)]
 			# end_score[:,self.tag_dictionary.get_idx_for_item(STOP_TAG)]=0
 
@@ -2169,7 +2147,6 @@ class FastSequenceTagger(SequenceTagger):
 			
 			binary_mask=self.sequence_mask(torch.Tensor(lengths)-1, max_len-1).unsqueeze(-1).cuda().long()
 			if binary_mask.shape[1]==2 and 0:
-				pdb.set_trace()
 				teacher_structure_score = data_points.teacher_features['distributions'].to(flair.device)
 				teacher_structure_score = teacher_structure_score.view(teacher_structure_score.shape[0],teacher_structure_score.shape[1],self.tagset_size,self.tagset_size)[:,1:]*binary_mask.unsqueeze(-1)
 				# 2,1 -> 3,2,1 || 3,2 -> 3,2,1
@@ -2181,7 +2158,6 @@ class FastSequenceTagger(SequenceTagger):
 				student_overall_score = (start_score.unsqueeze(1)+student_structure_score[:,0]).unsqueeze(1)+(student_structure_score[:,1]+end_score.unsqueeze(-1)).unsqueeze(-1)
 				temp_loss = -((teacher_overall_prob.view(batch_size,-1) * student_overall_score.view(batch_size,-1)).sum(-1)- partition_score)
 				# teacher_logits = data_points.teacher_features['distributions'].to(flair.device)
-				# pdb.set_trace()
 				# sent lengths = 2
 				# L*L
 				# teacher_prob=teacher_logits.softmax(-1)
@@ -2239,7 +2215,6 @@ class FastSequenceTagger(SequenceTagger):
 				# print(KD_loss)
 				# print(KD_loss1-KD_loss2)
 				# print(KD_loss-KD_loss1)
-				pdb.set_trace()
 			exact_loss = self._calculate_xstruct_distillation_loss(structure_score, partition_score, start_score, end_score, teacher_score, teacher_startscore, teacher_endscore, binary_mask, T=self.temperature)
 		else:
 			exact_loss = 0
@@ -2308,7 +2283,6 @@ class FastSequenceTagger(SequenceTagger):
 				distillation_loss=distillation_loss.mean()
 			# distillation_loss, partition, tg_energy=self.crf_loss(crf_scores.transpose(1,0),tags.transpose(1,0),mask_input.transpose(1,0).bool())
 		if not self.use_crf or self.distill_emission:
-			# pdb.set_trace()
 			if teacher is not None:
 				with torch.no_grad():
 					teacher_features = teacher.forward(teacher_data_points)
@@ -2365,7 +2339,6 @@ class FastSequenceTagger(SequenceTagger):
 		target_loss = self._calculate_loss(features, data_points, mask)
 		# target_loss2 = super()._calculate_loss(features,data_points)
 		# distillation_loss2 = super()._calculate_distillation_loss(features, teacher_features,torch.tensor(lengths))
-		# pdb.set_trace()
 		# print(target_loss)
 		return interpolation * (posterior_loss + distillation_loss + exact_loss) + (1-interpolation) * target_loss + teacher_target_loss
 
@@ -2381,7 +2354,6 @@ class FastSequenceTagger(SequenceTagger):
 				.lt(lengths.unsqueeze(1)))
 
 	def _calculate_distillation_loss(self, features, teacher_features, mask, T = 1, teacher_is_score=True):
-		# pdb.set_trace()
 		if teacher_is_score:
 			teacher_prob=F.softmax(teacher_features/T, dim=-1)
 		else:
@@ -2405,7 +2377,6 @@ class FastSequenceTagger(SequenceTagger):
 		teacher_endprob=teacher_endscore.softmax(-1)
 		# KD_loss = -(((teacher_prob * structure_score / T * binary_mask).sum([-1,-2])- partition_score) * T * T)
 		if teacher_prob.shape[1]==0:
-			# pdb.set_trace()
 			KD_loss = -(((teacher_startprob * start_score / T + teacher_endprob * end_score / T).sum(-1) - partition_score) * T * T)
 		else:
 			KD_loss = -(((teacher_prob * structure_score / T * binary_mask).sum([-1,-2]) + (teacher_startprob * start_score / T + teacher_endprob * end_score / T).sum(-1) - partition_score) * T * T)
@@ -2413,7 +2384,6 @@ class FastSequenceTagger(SequenceTagger):
 
 		# KD_loss = KD_loss.sum()/mask.sum()
 		# if binary_mask.shape[1]==1:
-		#   pdb.set_trace()
 		if (KD_loss<0).any():
 			KD_loss[torch.where(KD_loss<0)]=0
 		if self.sentence_level_loss or self.use_crf:
@@ -2445,7 +2415,6 @@ class FastSequenceTagger(SequenceTagger):
 
 			tag_list, _ = pad_tensors(tag_list)
 		if self.remove_x:
-			# pdb.set_trace()
 			remove_tag = self.tag_dictionary.get_idx_for_item('S-X')
 			mask_tags = remove_tag == tag_list
 			mask = (mask.bool() & ~mask_tags).float()
@@ -2469,7 +2438,6 @@ class FastSequenceTagger(SequenceTagger):
 			score = posterior_score
 			# score = (1-self.posterior_interpolation) * score + self.posterior_interpolation * posterior_score
 		elif self.use_crf:
-			# pdb.set_trace()
 			if self.remove_x:
 				masked_lengths = mask.sum(-1).long()
 				masked_features = torch.zeros([features.shape[0],masked_lengths.max(),features.shape[-1]]).type_as(features)
@@ -2482,7 +2450,6 @@ class FastSequenceTagger(SequenceTagger):
 					try:
 						masked_features[i,:masked_lengths[i],:] = features[i].masked_select(temp_mask[i]).view(masked_lengths[i],-1)
 					except:
-						pdb.set_trace()
 					masked_tag_list[i,:masked_lengths[i]] = tag_list[i].masked_select(select_mask[i])
 					crf_mask[i,:masked_lengths[i]] = mask[i].masked_select(select_mask[i])
 
@@ -2499,7 +2466,6 @@ class FastSequenceTagger(SequenceTagger):
 			if unlabeled_mask.sum() == 0:
 				score = 0 
 			elif 0 in unlabeled_mask:
-				# pdb.set_trace()
 				score = score.sum()/unlabeled_mask.sum()
 			else:
 				score = score.mean()
@@ -2561,7 +2527,6 @@ class FastSequenceTagger(SequenceTagger):
 		try:
 			pad_stop_tags = pad_stop_tags.cuda()*transition_mask2.long()+(1-transition_mask2.long())*self.tag_dictionary.get_idx_for_item(STOP_TAG)
 		except:
-			pdb.set_trace()
 		
 		my_emission=torch.gather(feats,2,tags.unsqueeze(-1))*mask.unsqueeze(-1)
 		
@@ -2613,7 +2578,6 @@ class FastSequenceTagger(SequenceTagger):
 				batch_no += 1
 
 				with torch.no_grad():
-					# pdb.set_trace()
 					features = self.forward(batch,prediction_mode=prediction_mode)
 					if not speed_test:
 						mask=self.mask
@@ -2641,50 +2605,21 @@ class FastSequenceTagger(SequenceTagger):
 						if out_path is not None:
 							outfile.write("\n")
 					for sentence in batch:
-						# make list of gold tags
-						gold_tags = [
-							(tag.tag, str(tag)) for tag in sentence.get_spans(self.tag_type)
-						]
-						# make list of predicted tags
-						predicted_tags = [
-							(tag.tag, str(tag)) for tag in sentence.get_spans("predicted")
-						]
-						if self.remove_x:
-							
-
-							# gold_tags_info = [[t.idx for t in tag.tokens] for tag in sentence.get_spans(self.tag_type)]
-							predicted_tags_info = [[t.idx for t in tag.tokens] for tag in sentence.get_spans("predicted")]
-							new_predicted_tags = []
-							for tag_idx, tags in enumerate(predicted_tags):
-								flag = 0
-								# stride=ast.literal_eval(re.match('.*\-span (\[.*\])\:.*',tags[1]).group(1))
-								stride = predicted_tags_info[tag_idx]
-								for val in stride:
-									if sentence[val-1].get_tag(self.tag_type).value == 'S-X':
-										flag = 1
-										break
-								if not flag:
-									# new_gold_tags.append(tags)
-									new_predicted_tags.append(tags)
-							predicted_tags = new_predicted_tags
-							new_gold_tags = [x for x in gold_tags if x[0] != 'X']
-							gold_tags = new_gold_tags
-
-						# check for true positives, false positives and false negatives
-						for tag, prediction in predicted_tags:
-
-							if (tag, prediction) in gold_tags:
-								metric.add_tp(tag)
+						# ── Token-level per-class evaluation ─────────────────────────────
+						# Works for flat punct labels (O, ，, 。, ...) and BIOES NER tags.
+						# Skips retrieved-context tokens (S-X) from evaluation.
+						for token in sentence.tokens:
+							gold_label = token.get_tag(self.tag_type).value
+							pred_label = token.get_tag("predicted").value
+							# Skip S-X context tokens from evaluation
+							if self.remove_x and gold_label == "S-X":
+								continue
+							if gold_label == pred_label:
+								metric.add_tp(gold_label)
 							else:
-								metric.add_fp(tag)
+								metric.add_fp(pred_label)
+								metric.add_fn(gold_label)
 
-						for tag, gold in gold_tags:
-							if (tag, gold) not in predicted_tags:
-								metric.add_fn(tag)
-							else:
-								metric.add_tn(tag)
-
-						# pdb.set_trace()
 					if len(data_loader)<10:
 						modulo = len(data_loader)
 					else:
@@ -2746,7 +2681,6 @@ class FastSequenceTagger(SequenceTagger):
 
 				with torch.no_grad():
 					# calcualte teacher features
-					# pdb.set_trace()
 					sent_lang_id = torch.cuda.LongTensor([sentence.lang_id for sentence in batch])
 					teacher_attention = torch.index_select(language_weight,0,sent_lang_id)
 					teacher_attention = F.softmax(teacher_attention,-1)

@@ -22,7 +22,6 @@ from .biaffine_attention import BiaffineAttention
 from tqdm import tqdm
 from tabulate import tabulate
 import numpy as np
-import pdb
 import copy
 import time
 
@@ -659,7 +658,6 @@ class SemanticDependencyParser(flair.nn.Model):
 		# print('===================')
 		# for x in sentences.features: print(x)
 		# print('===================')
-		# pdb.set_trace()
 		if hasattr(self,'keep_embedding'):	
 			sentence_tensor = [sentences.features[x].to(flair.device) for x in sorted(sentences.features.keys())]
 			embedding_name = sorted(sentences.features.keys())[self.keep_embedding]
@@ -679,7 +677,6 @@ class SemanticDependencyParser(flair.nn.Model):
 		#   sentence_tensor = getattr(sentences,'sentence_tensor').to(flair.device)
 
 		#   if self.debug:
-		#       pdb.set_trace()
 		# else:
 
 		#   self.embeddings.embed(sentences)
@@ -1128,7 +1125,6 @@ class SemanticDependencyParser(flair.nn.Model):
 				.lt(lengths.unsqueeze(1)))
 	def _calculate_distillation_loss(self, features, teacher_features, mask, binary_mask, T = 1, teacher_is_score=True, student_is_score = True):
 		# TODO: time with mask, and whether this should do softmax
-		# pdb.set_trace()
 		if teacher_is_score:
 			teacher_prob=F.softmax(teacher_features/T, dim=-1)
 		else:
@@ -1219,7 +1215,6 @@ class SemanticDependencyParser(flair.nn.Model):
 
 				# if self.debug:
 				#   if rel_loss<0 or arc_loss<0:
-				#       pdb.set_trace()
 				#=============================================================================================
 			else:
 				arc_scores, arcs = arc_scores[mask], arcs[mask]
@@ -1477,7 +1472,6 @@ class SemanticDependencyParser(flair.nn.Model):
 			# decode_time+=decode_end-decode_start
 			# ignore all punctuation if not specified
 			# if out_path is not None:
-			# 	pdb.set_trace()
 			if not self.punct:
 				for sent_id,sentence in enumerate(batch):
 					for token_id, token in enumerate(sentence):
@@ -1550,11 +1544,9 @@ class SemanticDependencyParser(flair.nn.Model):
 
 			# deal with masking
 			# if not (arc_preds*mask == result*mask).all():
-			#   pdb.set_trace()
 
 		rel_preds = rel_scores.argmax(-1)
 		rel_preds = rel_preds.gather(-1, arc_preds.unsqueeze(-1)).squeeze(-1)
-		# pdb.set_trace()
 		return arc_preds, rel_preds, arc_scores.max(-1)[0] * mask, rel_scores.max(-1)[0].gather(-1, arc_preds.unsqueeze(-1)).squeeze(-1) * mask
 	def get_state(self,):
 		return None

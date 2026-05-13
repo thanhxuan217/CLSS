@@ -10,7 +10,6 @@ import torch.optim as optim
 import torch.sparse as sparse
 import math
 import flair.nn
-import pdb
 
 class QuadriLinearScore(nn.Module):
     """

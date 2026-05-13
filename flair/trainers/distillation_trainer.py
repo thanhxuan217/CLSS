@@ -3,7 +3,6 @@ from flair.training_utils import store_teacher_predictions
 from flair.list_data import ListCorpus
 import math
 import random
-import pdb
 import copy
 from flair.datasets import CoupleDataset
 from ..custom_data_loader import ColumnDataLoader
@@ -417,7 +416,6 @@ class ModelDistiller(ModelTrainer):
 							loss.backward()
 					except Exception:
 						traceback.print_exc()
-						pdb.set_trace()
 					torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
 					optimizer.step()
 
@@ -739,7 +737,6 @@ class ModelDistiller(ModelTrainer):
 							try:
 								sentence.set_teacher_sentfeats(teacher.sent_feats[idx],self.embeddings_storage_mode)
 							except:
-								pdb.set_trace()
 						if not faster:
 							sentence.set_teacher_prediction(logits[idx][:len(sentence)], self.embeddings_storage_mode)
 						else:
@@ -857,7 +854,6 @@ class ModelDistiller(ModelTrainer):
 				assert posterior_lens==lens, 'lengths of two targets not match'
 			if max(lens)>min(lens) or max(sent_lens)!=max(lens):
 				# if max(sent_lens)!=max(lens):
-				#   pdb.set_trace()
 				max_shape=max(sent_lens)
 				for index, target in enumerate(targets):
 					new_targets=[]
@@ -952,9 +948,7 @@ class ModelDistiller(ModelTrainer):
 				#     XE[current_idx]+=((log_prob*tag_distribution*mask.float()).sum(-1).sum(-1)/(mask.float().sum(-1).sum(-1)*tag_distribution.shape[-1])).sum()
 				#     weighted_XE[current_idx]+=((log_prob*weighted_tag_distribution*mask.float()).sum(-1).sum(-1)/(mask.float().sum(-1).sum(-1)*weighted_tag_distribution.shape[-1])).sum()
 				#     if best_k==min_k or best_k==max_k-1:
-				#         pdb.set_trace()
 					
-			pdb.set_trace()
 			print(total)
 			print(total_tp)
 			# print('XE: ',XE)
@@ -1134,7 +1128,6 @@ class ModelDistiller(ModelTrainer):
 
 		return Path(learning_rate_tsv)
 	def gpu_friendly_assign_embedding(self,loaders, selection = None):
-		# pdb.set_trace()
 		# torch.cuda.empty_cache()
 		embedlist = sorted([(embedding.name, embedding) for embedding in self.model.embeddings.embeddings], key = lambda x: x[0])
 		# for embedding in self.model.embeddings.embeddings:
@@ -1142,7 +1135,6 @@ class ModelDistiller(ModelTrainer):
 			embedding = embedding_tuple[1]
 			
 			if ('WordEmbeddings' != embedding.__class__.__name__ and 'FastWordEmbeddings' != embedding.__class__.__name__ and 'Char' not in embedding.__class__.__name__ and 'Lemma' not in embedding.__class__.__name__ and 'POS' not in embedding.__class__.__name__) and not (hasattr(embedding,'fine_tune') and embedding.fine_tune):
-				# pdb.set_trace()
 
 				log.info(f"{embedding.name} {count_parameters(embedding)}")
 				# 
@@ -1156,7 +1148,6 @@ class ModelDistiller(ModelTrainer):
 				if 'elmo' in embedding.name:
 					# embedding.reset_elmo()
 					# continue
-					# pdb.set_trace()
 					embedding.ee.elmo_bilm.cuda(device=embedding.ee.cuda_device)
 					states=[x.to(flair.device) for x in embedding.ee.elmo_bilm._elmo_lstm._states]
 					embedding.ee.elmo_bilm._elmo_lstm._states = states
@@ -1167,7 +1158,6 @@ class ModelDistiller(ModelTrainer):
 						lengths: List[int] = [len(sentence.tokens) for sentence in sentences]
 						longest_token_sequence_in_batch: int = max(lengths)
 						# if longest_token_sequence_in_batch>100:
-						#   pdb.set_trace()
 						embedding.embed(sentences)
 						store_embeddings(sentences, self.embeddings_storage_mode)
 				embedding=embedding.to('cpu')
@@ -1184,11 +1174,9 @@ class ModelDistiller(ModelTrainer):
 					for sentence in sentences:
 						gold_tags = [token.tags[self.model.tag_type].value for token in sentence]
 						gold_span = []
-						# pdb.set_trace()
 						for tag_id, tag in enumerate(gold_tags):
 							if tag != 'S-X':
 								gold_span.append(tag_id)
-						# pdb.set_trace()
 						# sentence=sentence[gold_span[0]:gold_span[-1]+1]
 						sentence.chunk_sentence(gold_span[0],gold_span[-1]+1)
 				loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
@@ -1213,14 +1201,12 @@ class ModelDistiller(ModelTrainer):
 			try: 
 				assert len(doc_dict[key])==len(sentences_emb)
 			except:
-				pdb.set_trace()
 			for i, sentence in enumerate(doc_dict[key]):
 				for token, token_idx in zip(sentence.tokens, range(len(sentence.tokens))):
 					try:
 						word_embedding = sentences_emb[i][token_idx]
 						word_embedding = torch.from_numpy(word_embedding).view(-1)
 					except:
-						pdb.set_trace()
 
 					token.set_embedding(embedding.name, word_embedding)
 				store_embeddings([sentence], 'cpu')

@@ -5,7 +5,6 @@ from flair.parser.utils.fn import pad, stripe
 import torch
 import torch.autograd as autograd
 
-import pdb
 
 def kmeans(x, k):
     x = torch.tensor(x, dtype=torch.float)

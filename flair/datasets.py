@@ -13,7 +13,6 @@ from torch.utils.data.dataset import Subset, ConcatDataset
 import flair
 from flair.data import Sentence, Corpus, Token, FlairDataset
 from flair.file_utils import cached_path
-import pdb
 
 log = logging.getLogger("flair")
 
@@ -907,7 +906,6 @@ class ColumnDataset(FlairDataset):
 
             line = f.readline()
             position = 0
-            # pdb.set_trace()
             while line:
 
                 if self.comment_symbol is not None and line.startswith(comment_symbol):
@@ -1045,12 +1043,9 @@ class UniversalDependenciesDataset(FlairDataset):
                 line = line.strip()
                 fields: List[str] = re.split(spliter+"+", line)
                 # if 'unlabel' in str(path_to_conll_file) and line_count>92352:
-                #     pdb.set_trace()
                 if line == "":
                     if (len(sentence)==1 and sentence[0].text==root_tag):
-                        pdb.set_trace()
                     if len(sentence) > 0 and not (len(sentence)==1 and sentence[0].text==root_tag):
-                        # pdb.set_trace()
                         self.total_sentence_count += 1
                         if self.in_memory:
                             self.sentences.append(sentence)
@@ -1085,7 +1080,6 @@ class UniversalDependenciesDataset(FlairDataset):
                     sentence.add_token(token)
                 elif len(fields)==3:
                     token = Token(fields[1])
-                    # pdb.set_trace()
                     sentence.add_token(token)
                 else:
                     token = Token(fields[1], head_id=int(fields[6]))
@@ -2319,7 +2313,6 @@ class CONLL_03_DUTCH_DP(ColumnCorpus):
 
         # download data if necessary
         conll_02_path = "https://www.clips.uantwerpen.be/conll2002/ner/data/"
-        # pdb.set_trace()
         cached_path(f"{conll_02_path}ned.testa", Path("datasets") / dataset_name)
         cached_path(f"{conll_02_path}ned.testb", Path("datasets") / dataset_name)
         cached_path(f"{conll_02_path}ned.train", Path("datasets") / dataset_name)
@@ -2798,7 +2791,6 @@ class SEMEVAL16(ColumnCorpus):
         train_file = Path('train/' + language+'_semeval2016_restaurants_train.bio')
         dev_file = Path('train/' + language+'_semeval2016_restaurants_dev.bio')
         test_file = Path('test/' + lang.upper()+'_REST_SB1_TEST.xml.gold.bio')
-        # pdb.set_trace()
         super(SEMEVAL16, self).__init__(data_folder, columns, in_memory=in_memory,
                                                 train_file=data_folder/train_file,
                                                 test_file=data_folder/test_file,
@@ -2936,7 +2928,6 @@ class CALCS(ColumnCorpus):
         data_folder = base_path / target_path
         # lc_to_lang = {'tr':'Turkish','es':'Spanish','nl':'Dutch','en':'English','ru':'Russian'}
         # language = lc_to_lang[lang]
-        # pdb.set_trace()
         super(CALCS, self).__init__(data_folder, columns, in_memory=in_memory,
                                                 train_file=data_folder/'calcs_train.conll',
                                                 test_file=data_folder/'calcs_test.conll',

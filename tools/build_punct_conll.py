@@ -56,77 +56,9 @@ SENTENCE_END = {"。", "？", "！"}
 # Dấu câu và ký tự cần bỏ qua (không làm token)
 SKIP_CHARS = set("　 \t\r\n")
 
-# Regex để chuẩn hóa
-MULTI_NEWLINE_RE = re.compile(r"\n{2,}")
-
-
 def normalize_text(text: str) -> str:
     """Chuẩn hóa Unicode NFC."""
     return unicodedata.normalize("NFC", text)
-
-
-def text_to_tokens_labels(text: str) -> list[tuple[str, str]]:
-    """
-    Chuyển chuỗi văn bản thành list (token, label).
-    Mỗi token là 1 ký tự không phải dấu câu.
-    Label là dấu câu xuất hiện SAU token đó (hoặc 'O').
-    """
-    result: list[tuple[str, str]] = []
-    i = 0
-    chars = list(text)
-    n = len(chars)
-
-    while i < n:
-        ch = chars[i]
-
-        # Bỏ qua ký tự whitespace
-        if ch in SKIP_CHARS:
-            i += 1
-            continue
-
-        # Nếu là dấu câu và chưa có token trước → bỏ qua (dấu câu đầu câu)
-        if ch in PUNCT_LABELS:
-            if result:
-                # Gắn vào token trước nếu token đó vẫn là 'O'
-                prev_tok, prev_lab = result[-1]
-                if prev_lab == "O":
-                    result[-1] = (prev_tok, ch)
-                # Nếu token trước đã có label → bỏ dấu câu thứ 2 liên tiếp
-            i += 1
-            continue
-
-        # Ký tự thường → thêm token với label 'O'
-        result.append((ch, "O"))
-        i += 1
-
-    return result
-
-
-def split_to_sentences(
-    token_label_pairs: list[tuple[str, str]],
-    min_len: int = 3,
-    max_len: int = 150,
-) -> list[list[tuple[str, str]]]:
-    """
-    Tách list (token, label) thành list các câu.
-    Tách tại vị trí token có label là dấu câu kết thúc câu (。？！).
-    """
-    sentences = []
-    current: list[tuple[str, str]] = []
-
-    for tok, lab in token_label_pairs:
-        current.append((tok, lab))
-        if lab in SENTENCE_END:
-            # Kết thúc câu
-            if min_len <= len(current) <= max_len:
-                sentences.append(current)
-            current = []
-
-    # Phần còn lại chưa kết thúc
-    if current and min_len <= len(current) <= max_len:
-        sentences.append(current)
-
-    return sentences
 
 
 def process_file(
@@ -134,35 +66,65 @@ def process_file(
     min_len: int,
     max_len: int,
     encoding: str,
-) -> list[list[tuple[str, str]]]:
-    """Xử lý một file txt, trả về list các câu."""
+) -> list[str]:
+    """Xử lý một file txt, trả về list các câu dưới dạng chuỗi CoNLL."""
+    all_sentences = []
     try:
-        text = file_path.read_text(encoding=encoding, errors="ignore")
+        with open(file_path, "r", encoding=encoding, errors="ignore") as f:
+            current_sent_tokens = []
+            
+            for line in f:
+                if not line.strip():
+                    if current_sent_tokens:
+                        if min_len <= len(current_sent_tokens) <= max_len:
+                            all_sentences.append("\n".join(f"{t}\t{l}" for t, l in current_sent_tokens))
+                        current_sent_tokens = []
+                    continue
+                
+                text = normalize_text(line.strip())
+                chars = list(text)
+                i = 0
+                n = len(chars)
+                
+                while i < n:
+                    ch = chars[i]
+                    if ch in SKIP_CHARS:
+                        i += 1
+                        continue
+                    
+                    if ch in PUNCT_LABELS:
+                        if current_sent_tokens:
+                            prev_tok, prev_lab = current_sent_tokens[-1]
+                            if prev_lab == "O":
+                                current_sent_tokens[-1] = (prev_tok, ch)
+                                # Kiểm tra xem đây có phải là dấu kết thúc câu không
+                                if ch in SENTENCE_END:
+                                    if min_len <= len(current_sent_tokens) <= max_len:
+                                        all_sentences.append("\n".join(f"{t}\t{l}" for t, l in current_sent_tokens))
+                                    current_sent_tokens = []
+                        i += 1
+                        continue
+                        
+                    current_sent_tokens.append((ch, "O"))
+                    i += 1
+                    
+            if current_sent_tokens and min_len <= len(current_sent_tokens) <= max_len:
+                all_sentences.append("\n".join(f"{t}\t{l}" for t, l in current_sent_tokens))
+                
     except Exception as exc:
         logger.warning("Không đọc được %s: %s", file_path, exc)
         return []
 
-    text = normalize_text(text)
-    # Tách theo paragraph (2+ newlines) để tránh nối câu qua các đoạn
-    paragraphs = MULTI_NEWLINE_RE.split(text)
-    all_sentences = []
-    for para in paragraphs:
-        if not para.strip():
-            continue
-        pairs = text_to_tokens_labels(para.strip())
-        sents = split_to_sentences(pairs, min_len, max_len)
-        all_sentences.extend(sents)
     return all_sentences
 
 
-def write_conll(sentences: list[list[tuple[str, str]]], out_file: Path) -> None:
+def write_conll(sentences: list[str], out_file: Path) -> None:
     """Ghi danh sách câu ra file CoNLL 2-cột."""
     out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(out_file, "w", encoding="utf-8") as f:
         for sent in sentences:
-            for tok, lab in sent:
-                f.write(f"{tok}\t{lab}\n")
-            f.write("\n")
+            f.write(sent)
+            f.write("\n\n")
     logger.info("  Đã ghi %d câu → %s", len(sentences), out_file)
 
 
@@ -218,7 +180,7 @@ def main():
     logger.info("Tìm thấy %d file .txt", len(txt_files))
 
     # Thu thập tất cả câu
-    all_sentences: list[list[tuple[str, str]]] = []
+    all_sentences: list[str] = []
     for fp in txt_files:
         logger.info("Xử lý: %s", fp.name)
         sents = process_file(fp, args.min_sent_len, args.max_sent_len, args.encoding)
@@ -248,8 +210,10 @@ def main():
     # Thống kê
     label_counter: Counter = Counter()
     for sent in all_sentences:
-        for _, lab in sent:
-            label_counter[lab] += 1
+        for line in sent.split("\n"):
+            if line:
+                tok, lab = line.split("\t")
+                label_counter[lab] += 1
 
     total_tokens = sum(label_counter.values())
     logger.info("=" * 60)

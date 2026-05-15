@@ -9,7 +9,7 @@ MinHash LSH index.
 Quy trình:
   1. Đọc đệ quy tất cả file .txt trong thư mục raw
   2. Chuẩn hóa Unicode (NFC)
-  3. Tách câu dựa trên dấu câu (。，：、；？！ và Latin .,;:?!)
+  3. Tách câu dựa trên dấu câu (。，：、；？！)
   4. Loại bỏ câu quá ngắn / quá dài
   5. Deduplicate bằng exact hash
   6. Xuất file processed + thống kê
@@ -37,8 +37,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Dấu câu dùng để tách câu (Sino-Nom + Latin)
-SENTENCE_DELIMITERS = re.compile(r"[。！？；\n]+")
+# Dấu câu dùng để tách câu (Sino-Nom)
+# Thêm ngoặc () để re.split giữ lại dấu câu (delimiter) trong mảng kết quả
+SENTENCE_DELIMITERS = re.compile(r"([。！？；\n]+)")
 
 # Ký tự để loại bỏ / chuẩn hoá khoảng trắng
 WHITESPACE_RE = re.compile(r"\s+")
@@ -53,15 +54,26 @@ def normalize_text(text: str) -> str:
 
 def split_sentences(text: str) -> list[str]:
     """
-    Tách câu theo dấu câu.
+    Tách câu theo dấu câu và giữ lại dấu câu ở cuối.
     Trả về list các câu đã strip whitespace, không rỗng.
     """
     parts = SENTENCE_DELIMITERS.split(text)
     sentences = []
-    for part in parts:
-        sent = part.strip()
-        if sent:
-            sentences.append(sent)
+    
+    # Do có capturing group (), parts sẽ có dạng: [text1, delim1, text2, delim2, ...]
+    for i in range(0, len(parts) - 1, 2):
+        sent = parts[i].strip()
+        delim = parts[i+1].strip()  # strip để bỏ \n, khoảng trắng nếu có
+        combined = sent + delim
+        if combined:
+            sentences.append(combined)
+            
+    # Xử lý phần text cuối cùng (nếu file không kết thúc bằng dấu câu)
+    if len(parts) % 2 != 0:
+        last = parts[-1].strip()
+        if last:
+            sentences.append(last)
+            
     return sentences
 
 

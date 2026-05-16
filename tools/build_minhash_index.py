@@ -6,33 +6,38 @@ build_minhash_index.py
 Build MinHash LSH index từ raw corpus hoặc file đã xử lý trước
 (output của preprocess_raw_corpus.py).
 
+Phiên bản tối ưu bộ nhớ — streaming + batch processing để chạy trên
+môi trường hạn chế RAM (Kaggle ~13 GB, Colab ~12 GB).
+
 Quy trình:
-  1. Đọc câu từ raw dir (*.txt, đệ quy) HOẶC file processed (1 dòng/câu)
-  2. Tạo character n-gram shingles cho mỗi câu
-  3. Tạo MinHash signature (datasketch)
-  4. Nạp vào MinHashLSH index
-  5. Lưu index + danh sách câu vào file pickle
+  1. Stream câu từ file processed (1 dòng/câu) HOẶC raw dir
+  2. Xử lý theo batch: tạo shingles → MinHash → insert LSH
+  3. Giải phóng MinHash ngay sau khi insert (LSH chỉ giữ band hash)
+  4. Lưu index (pickle) + danh sách câu (text file, 1 dòng/câu)
 
 Usage:
-  # Từ raw directory:
-  python tools/build_minhash_index.py \\
-      --raw_data_dir  data/raw \\
-      --output_index  data/index/minhash.pkl \\
-      --output_sentences data/index/sentences.pkl
+  # Từ file đã preprocess (khuyến nghị):
+  python tools/build_minhash_index.py \
+      --sentences_file data/processed/corpus_sentences.txt \
+      --output_index   data/index/minhash.pkl \
+      --output_sentences data/index/sentences.txt \
+      --batch_size 50000
 
-  # Từ file đã preprocess:
-  python tools/build_minhash_index.py \\
-      --sentences_file data/processed/corpus_sentences.txt \\
-      --output_index   data/index/minhash.pkl \\
-      --output_sentences data/index/sentences.pkl
+  # Từ raw directory:
+  python tools/build_minhash_index.py \
+      --raw_data_dir  data/raw \
+      --output_index  data/index/minhash.pkl \
+      --output_sentences data/index/sentences.txt
 """
 
 import argparse
+import gc
 import hashlib
 import logging
 import os
 import pickle
 import re
+import sys
 import unicodedata
 from pathlib import Path
 
@@ -95,37 +100,55 @@ def is_valid(sent: str, min_len: int, max_len: int) -> bool:
     return min_len <= char_count <= max_len
 
 
+def get_mem_mb() -> float:
+    """Trả về RSS hiện tại (MB). Hỗ trợ Linux (Kaggle) và Windows."""
+    try:
+        import resource
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # KB -> MB
+    except ImportError:
+        try:
+            import psutil
+            return psutil.Process().memory_info().rss / (1024 * 1024)
+        except ImportError:
+            return 0.0
+
+
 # ──────────────────────────────────────────────────────────────────────────────
-# Data loading
+# Streaming data loading
 # ──────────────────────────────────────────────────────────────────────────────
 
-def load_from_processed_file(file_path: Path, encoding: str = "utf-8") -> list[str]:
-    """Đọc file mỗi dòng 1 câu (output của preprocess_raw_corpus.py)."""
-    logger.info("Đọc câu từ file: %s", file_path)
-    sentences = []
+def count_lines(file_path: Path) -> int:
+    """Đếm số dòng không rỗng trong file (nhanh, không load toàn bộ vào RAM)."""
+    count = 0
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            if line.strip():
+                count += 1
+    return count
+
+
+def iter_sentences_from_file(file_path: Path, encoding: str = "utf-8"):
+    """Generator — yield từng câu từ file processed (1 dòng = 1 câu)."""
     with open(file_path, "r", encoding=encoding, errors="ignore") as f:
         for line in f:
             sent = line.strip()
             if sent:
-                sentences.append(sent)
-    logger.info("Đọc được %d câu", len(sentences))
-    return sentences
+                yield sent
 
 
-def load_from_raw_dir(
+def iter_sentences_from_raw_dir(
     raw_dir: Path,
     min_len: int,
     max_len: int,
     encoding: str = "utf-8",
-) -> list[str]:
-    """Duyệt đệ quy thư mục raw, tách câu và lọc."""
+):
+    """Generator — yield từng câu hợp lệ từ raw dir (đã dedup)."""
     txt_files = sorted(raw_dir.rglob("*.txt"))
     if not txt_files:
         raise FileNotFoundError(f"Không tìm thấy file .txt nào trong: {raw_dir}")
     logger.info("Tìm thấy %d file .txt trong %s", len(txt_files), raw_dir)
 
     seen: set[str] = set()
-    sentences: list[str] = []
 
     for fpath in txt_files:
         try:
@@ -141,88 +164,178 @@ def load_from_raw_dir(
             if fp in seen:
                 continue
             seen.add(fp)
-            sentences.append(sent)
-
-    logger.info("Tổng câu hợp lệ (sau dedup): %d", len(sentences))
-    return sentences
+            yield sent
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Index builder
+# Index builder — batch streaming
 # ──────────────────────────────────────────────────────────────────────────────
 
-def build_index(
-    sentences: list[str],
+def build_index_streaming(
+    sentence_iter,
     num_perm: int,
     ngram_size: int,
     threshold: float,
-) -> MinHashLSH:
-    """Build MinHashLSH index từ danh sách câu."""
+    batch_size: int,
+    sentences_out_path: Path,
+) -> tuple:
+    """
+    Build MinHashLSH index bằng streaming.
+
+    Thay vì load toàn bộ sentences vào list rồi tạo MinHash:
+      - Đọc từng batch câu
+      - Tạo MinHash + insert vào LSH ngay
+      - Ghi câu ra file text ngay (không giữ trong RAM)
+      - Giải phóng MinHash objects sau mỗi batch
+
+    Returns:
+        (lsh, total_indexed) — LSH index + số câu đã index
+    """
     lsh = MinHashLSH(threshold=threshold, num_perm=num_perm)
 
     logger.info(
-        "Building MinHash LSH index: %d câu | num_perm=%d | ngram=%d | threshold=%.2f",
-        len(sentences),
-        num_perm,
-        ngram_size,
-        threshold,
+        "Building MinHash LSH index (streaming): "
+        "num_perm=%d | ngram=%d | threshold=%.2f | batch_size=%d",
+        num_perm, ngram_size, threshold, batch_size,
     )
 
-    errors = 0
-    for idx, sent in enumerate(sentences):
-        shingles = make_shingles(sent, ngram_size)
-        m = make_minhash(shingles, num_perm)
-        key = str(idx)
-        try:
-            lsh.insert(key, m)
-        except ValueError:
-            # Trùng key — không xảy ra vì key là index
-            errors += 1
+    sentences_out_path.parent.mkdir(parents=True, exist_ok=True)
+    f_out = open(sentences_out_path, "w", encoding="utf-8")
 
-        if (idx + 1) % 50_000 == 0:
-            logger.info("  … %d / %d câu đã index", idx + 1, len(sentences))
+    total = 0
+    errors = 0
+    batch = []
+
+    try:
+        for sent in sentence_iter:
+            batch.append(sent)
+
+            if len(batch) >= batch_size:
+                indexed, errs = _process_batch(
+                    batch, total, lsh, num_perm, ngram_size, f_out
+                )
+                total += indexed
+                errors += errs
+                batch.clear()
+                gc.collect()
+
+                mem = get_mem_mb()
+                logger.info(
+                    "  … %d câu đã index | RAM ≈ %.0f MB", total, mem
+                )
+
+        # Batch cuối
+        if batch:
+            indexed, errs = _process_batch(
+                batch, total, lsh, num_perm, ngram_size, f_out
+            )
+            total += indexed
+            errors += errs
+            batch.clear()
+            gc.collect()
+
+    finally:
+        f_out.close()
 
     if errors:
         logger.warning("Bỏ qua %d câu do lỗi khi insert vào LSH", errors)
 
-    logger.info("Hoàn thành index: %d câu", len(sentences) - errors)
-    return lsh
+    logger.info("Hoàn thành index: %d câu (bỏ qua %d lỗi)", total, errors)
+    return lsh, total
 
 
-def save_artifacts(
+def _process_batch(
+    batch: list[str],
+    start_idx: int,
     lsh: MinHashLSH,
-    sentences: list[str],
-    index_path: str,
-    sentences_path: str,
-) -> None:
+    num_perm: int,
+    ngram_size: int,
+    f_out,
+) -> tuple:
+    """Xử lý 1 batch: tạo MinHash, insert LSH, ghi câu ra file."""
+    indexed = 0
+    errors = 0
+
+    for i, sent in enumerate(batch):
+        global_idx = start_idx + i
+        shingles = make_shingles(sent, ngram_size)
+        m = make_minhash(shingles, num_perm)
+        key = str(global_idx)
+        try:
+            lsh.insert(key, m)
+            f_out.write(sent + "\n")
+            indexed += 1
+        except ValueError:
+            errors += 1
+
+        # Giải phóng MinHash ngay — LSH chỉ lưu band hash, không cần giữ
+        del m
+        del shingles
+
+    return indexed, errors
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Save / Load
+# ──────────────────────────────────────────────────────────────────────────────
+
+def save_index(lsh: MinHashLSH, index_path: str) -> None:
     idx_p = Path(index_path)
-    sent_p = Path(sentences_path)
     idx_p.parent.mkdir(parents=True, exist_ok=True)
-    sent_p.parent.mkdir(parents=True, exist_ok=True)
 
     with open(idx_p, "wb") as f:
-        pickle.dump(lsh, f)
-    logger.info("LSH index đã lưu -> %s", idx_p)
+        pickle.dump(lsh, f, protocol=pickle.HIGHEST_PROTOCOL)
+    size_mb = idx_p.stat().st_size / (1024 * 1024)
+    logger.info("LSH index đã lưu -> %s (%.1f MB)", idx_p, size_mb)
 
-    with open(sent_p, "wb") as f:
-        pickle.dump(sentences, f)
-    logger.info("Sentence list đã lưu -> %s", sent_p)
+
+def load_sentences_from_file(path: str) -> list[str]:
+    """Load sentences từ text file (dùng khi query)."""
+    sents = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            s = line.strip()
+            if s:
+                sents.append(s)
+    return sents
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Quick self-test
 # ──────────────────────────────────────────────────────────────────────────────
 
-def self_test(lsh: MinHashLSH, sentences: list[str], num_perm: int, ngram_size: int) -> None:
+def self_test(
+    lsh: MinHashLSH,
+    sentences_path: str,
+    num_perm: int,
+    ngram_size: int,
+) -> None:
     """Thử query 3 câu đầu để verify index hoạt động."""
     logger.info("─── Self-test (3 câu đầu) ───")
-    for sent in sentences[:3]:
+
+    # Chỉ đọc 3 dòng đầu
+    test_sents = []
+    with open(sentences_path, "r", encoding="utf-8") as f:
+        for line in f:
+            s = line.strip()
+            if s:
+                test_sents.append(s)
+            if len(test_sents) >= 3:
+                break
+
+    # Đọc đủ sentences để hiển thị kết quả (load lazy, chỉ khi self-test)
+    all_sents = load_sentences_from_file(sentences_path)
+
+    for sent in test_sents:
         shingles = make_shingles(sent, ngram_size)
         m = make_minhash(shingles, num_perm)
         results = lsh.query(m)
-        retrieved = [sentences[int(r)] for r in results[:5]]
+        retrieved = [all_sents[int(r)] for r in results[:5] if int(r) < len(all_sents)]
         logger.info("Query: %s", sent[:60])
         logger.info("  → %d kết quả, ví dụ: %s", len(results), retrieved[:2])
+
+    del all_sents
+    gc.collect()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -231,7 +344,7 @@ def self_test(lsh: MinHashLSH, sentences: list[str], num_perm: int, ngram_size: 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build MinHash LSH index cho Sino-Nom RAG"
+        description="Build MinHash LSH index cho Sino-Nom RAG (memory-efficient)"
     )
 
     # Input (chọn 1 trong 2)
@@ -254,7 +367,7 @@ def main():
     parser.add_argument(
         "--output_sentences",
         required=True,
-        help="Đường dẫn lưu danh sách câu tương ứng (pickle)",
+        help="Đường dẫn lưu danh sách câu tương ứng (text file, 1 dòng/câu)",
     )
 
     # MinHash parameters
@@ -264,6 +377,10 @@ def main():
                         help="Kích thước character n-gram. Default: 2 (bigram)")
     parser.add_argument("--threshold", type=float, default=0.3,
                         help="Ngưỡng Jaccard similarity cho LSH bucket. Default: 0.3")
+
+    # Memory optimization
+    parser.add_argument("--batch_size", type=int, default=50_000,
+                        help="Số câu xử lý mỗi batch. Giảm nếu OOM. Default: 50000")
 
     # Filter (chỉ dùng khi --raw_data_dir)
     parser.add_argument("--min_length", type=int, default=5,
@@ -277,29 +394,43 @@ def main():
 
     args = parser.parse_args()
 
-    # Load sentences
+    # ── Tạo sentence iterator (streaming, không load hết vào RAM) ──
     if args.sentences_file:
-        sentences = load_from_processed_file(Path(args.sentences_file), args.encoding)
+        sent_path = Path(args.sentences_file)
+        logger.info("Đếm số câu trong %s …", sent_path)
+        total_lines = count_lines(sent_path)
+        logger.info("Tổng câu: %d", total_lines)
+        sentence_iter = iter_sentences_from_file(sent_path, args.encoding)
     else:
-        sentences = load_from_raw_dir(
+        sentence_iter = iter_sentences_from_raw_dir(
             Path(args.raw_data_dir), args.min_length, args.max_length, args.encoding
         )
 
-    if not sentences:
-        logger.error("Không có câu nào để index. Kiểm tra lại input.")
+    # ── Build index (streaming) ──
+    out_sentences = Path(args.output_sentences)
+    lsh, total_indexed = build_index_streaming(
+        sentence_iter=sentence_iter,
+        num_perm=args.num_perm,
+        ngram_size=args.ngram_size,
+        threshold=args.threshold,
+        batch_size=args.batch_size,
+        sentences_out_path=out_sentences,
+    )
+
+    if total_indexed == 0:
+        logger.error("Không có câu nào được index. Kiểm tra lại input.")
         return
 
-    # Build index
-    lsh = build_index(sentences, args.num_perm, args.ngram_size, args.threshold)
+    # ── Save index ──
+    save_index(lsh, args.output_index)
+    logger.info("Sentence list đã lưu -> %s", out_sentences)
 
-    # Save
-    save_artifacts(lsh, sentences, args.output_index, args.output_sentences)
-
-    # Self-test
+    # ── Self-test ──
     if not args.no_self_test:
-        self_test(lsh, sentences, args.num_perm, args.ngram_size)
+        self_test(lsh, str(out_sentences), args.num_perm, args.ngram_size)
 
-    logger.info("✓ Hoàn thành!")
+    mem = get_mem_mb()
+    logger.info("✓ Hoàn thành! Tổng: %d câu | Peak RAM ≈ %.0f MB", total_indexed, mem)
 
 
 if __name__ == "__main__":

@@ -291,7 +291,7 @@ def main():
     parser.add_argument("--index_path", required=True,
                         help="File MinHashLSH index (.pkl)")
     parser.add_argument("--sentences_path", required=True,
-                        help="File danh sách câu corpus (.pkl)")
+                        help="File danh sách câu corpus (.txt hoặc .pkl)")
 
     parser.add_argument("--top_k", type=int, default=5,
                         help="Số câu retrieved tối đa mỗi câu gốc. Default: 5")
@@ -321,8 +321,19 @@ def main():
         lsh: MinHashLSH = pickle.load(f)
 
     logger.info("Đang tải sentence list từ: %s", args.sentences_path)
-    with open(args.sentences_path, "rb") as f:
-        corpus_sentences: list[str] = pickle.load(f)
+    sent_path = Path(args.sentences_path)
+    if sent_path.suffix == ".pkl":
+        # Legacy pickle format
+        with open(sent_path, "rb") as f:
+            corpus_sentences: list[str] = pickle.load(f)
+    else:
+        # New text format (1 dòng = 1 câu) — tiết kiệm RAM hơn
+        corpus_sentences = []
+        with open(sent_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                s = line.strip()
+                if s:
+                    corpus_sentences.append(s)
 
     logger.info("Index: %d câu trong corpus", len(corpus_sentences))
 

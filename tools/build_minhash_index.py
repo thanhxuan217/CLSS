@@ -7,7 +7,7 @@ Build MinHash LSH index từ raw corpus hoặc file đã xử lý trước
 (output của preprocess_raw_corpus.py).
 
 Phiên bản tối ưu bộ nhớ — streaming + batch processing để chạy trên
-môi trường hạn chế RAM (Kaggle ~13 GB, Colab ~12 GB).
+môi trường hạn chế RAM (Kaggle ~29 GB, Colab ~12 GB).
 
 Quy trình:
   1. Stream câu từ file processed (1 dòng/câu) HOẶC raw dir
@@ -15,13 +15,18 @@ Quy trình:
   3. Giải phóng MinHash ngay sau khi insert (LSH chỉ giữ band hash)
   4. Lưu index (pickle) + danh sách câu (text file, 1 dòng/câu)
 
+Lưu ý bộ nhớ:
+  MinHashLSH lưu band hash cho MỌI key trong RAM (~370 bytes/key).
+  Với 46M+ câu → cần 17+ GB chỉ riêng cho LSH → dễ OOM.
+  Dùng --max_sentences để giới hạn số câu index (mặc định 10M ≈ 3.7 GB).
+
 Usage:
   # Từ file đã preprocess (khuyến nghị):
   python tools/build_minhash_index.py \
       --sentences_file data/processed/corpus_sentences.txt \
       --output_index   data/index/minhash.pkl \
       --output_sentences data/index/sentences.txt \
-      --batch_size 50000
+      --max_sentences 10000000
 
   # Từ raw directory:
   python tools/build_minhash_index.py \
@@ -127,13 +132,25 @@ def count_lines(file_path: Path) -> int:
     return count
 
 
-def iter_sentences_from_file(file_path: Path, encoding: str = "utf-8"):
-    """Generator — yield từng câu từ file processed (1 dòng = 1 câu)."""
+def iter_sentences_from_file(
+    file_path: Path,
+    encoding: str = "utf-8",
+    max_sentences: int = 0,
+):
+    """Generator — yield từng câu từ file processed (1 dòng = 1 câu).
+    
+    Args:
+        max_sentences: Dừng sau khi yield đủ số câu này. 0 = không giới hạn.
+    """
+    count = 0
     with open(file_path, "r", encoding=encoding, errors="ignore") as f:
         for line in f:
             sent = line.strip()
             if sent:
                 yield sent
+                count += 1
+                if max_sentences > 0 and count >= max_sentences:
+                    return
 
 
 def iter_sentences_from_raw_dir(
@@ -141,14 +158,20 @@ def iter_sentences_from_raw_dir(
     min_len: int,
     max_len: int,
     encoding: str = "utf-8",
+    max_sentences: int = 0,
 ):
-    """Generator — yield từng câu hợp lệ từ raw dir (đã dedup)."""
+    """Generator — yield từng câu hợp lệ từ raw dir (đã dedup).
+    
+    Args:
+        max_sentences: Dừng sau khi yield đủ số câu này. 0 = không giới hạn.
+    """
     txt_files = sorted(raw_dir.rglob("*.txt"))
     if not txt_files:
         raise FileNotFoundError(f"Không tìm thấy file .txt nào trong: {raw_dir}")
     logger.info("Tìm thấy %d file .txt trong %s", len(txt_files), raw_dir)
 
     seen: set[str] = set()
+    count = 0
 
     for fpath in txt_files:
         try:
@@ -165,6 +188,9 @@ def iter_sentences_from_raw_dir(
                 continue
             seen.add(fp)
             yield sent
+            count += 1
+            if max_sentences > 0 and count >= max_sentences:
+                return
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -381,6 +407,10 @@ def main():
     # Memory optimization
     parser.add_argument("--batch_size", type=int, default=50_000,
                         help="Số câu xử lý mỗi batch. Giảm nếu OOM. Default: 50000")
+    parser.add_argument("--max_sentences", type=int, default=10_000_000,
+                        help="Số câu tối đa để index. LSH dùng ~370 bytes/câu trong RAM. "
+                             "10M ≈ 3.7 GB, 20M ≈ 7.4 GB. Đặt 0 = không giới hạn. "
+                             "Default: 10000000")
 
     # Filter (chỉ dùng khi --raw_data_dir)
     parser.add_argument("--min_length", type=int, default=5,
@@ -395,15 +425,29 @@ def main():
     args = parser.parse_args()
 
     # ── Tạo sentence iterator (streaming, không load hết vào RAM) ──
+    max_s = args.max_sentences
     if args.sentences_file:
         sent_path = Path(args.sentences_file)
         logger.info("Đếm số câu trong %s …", sent_path)
         total_lines = count_lines(sent_path)
-        logger.info("Tổng câu: %d", total_lines)
-        sentence_iter = iter_sentences_from_file(sent_path, args.encoding)
+        logger.info("Tổng câu trong file: %d", total_lines)
+        if max_s > 0:
+            effective = min(total_lines, max_s)
+            est_ram = effective * 370 / (1024 * 1024)
+            logger.info(
+                "Giới hạn index: %d câu (--max_sentences=%d) | "
+                "RAM ước tính cho LSH: ~%.1f GB",
+                effective, max_s, est_ram / 1024,
+            )
+        sentence_iter = iter_sentences_from_file(
+            sent_path, args.encoding, max_sentences=max_s
+        )
     else:
+        if max_s > 0:
+            logger.info("Giới hạn index: %d câu (--max_sentences)", max_s)
         sentence_iter = iter_sentences_from_raw_dir(
-            Path(args.raw_data_dir), args.min_length, args.max_length, args.encoding
+            Path(args.raw_data_dir), args.min_length, args.max_length,
+            args.encoding, max_sentences=max_s,
         )
 
     # ── Build index (streaming) ──

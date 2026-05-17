@@ -196,6 +196,7 @@ def build_index(
     threshold: float,
     batch_size: int,
     db_path: Path,
+    max_db_size_gb: float = 0.0,
 ) -> int:
     """
     Build MinHash LSH index streaming vào SQLite.
@@ -241,7 +242,13 @@ def build_index(
             gc.collect()
             batch_count += 1
             mem = get_mem_mb()
-            logger.info("  … %d câu đã index | RAM ≈ %.0f MB", total, mem)
+            
+            db_size_gb = db_path.stat().st_size / (1024**3)
+            logger.info("  … %d câu đã index | RAM ≈ %.0f MB | DB size ≈ %.2f GB", total, mem, db_size_gb)
+            
+            if max_db_size_gb > 0 and db_size_gb >= max_db_size_gb:
+                logger.warning("Đã đạt giới hạn dung lượng DB (%.2f GB >= %.2f GB). Dừng index sớm.", db_size_gb, max_db_size_gb)
+                break
 
     # Flush phần còn lại
     lsh.flush()
@@ -324,11 +331,12 @@ def main():
     parser.add_argument("--threshold", type=float, default=0.3,
                         help="Ngưỡng Jaccard similarity cho LSH bucket. Default: 0.3")
 
-    # Memory / performance
     parser.add_argument("--batch_size", type=int, default=50_000,
                         help="Số câu mỗi batch flush xuống SQLite. Default: 50000")
     parser.add_argument("--max_sentences", type=int, default=0,
                         help="Số câu tối đa để index. 0 = không giới hạn. Default: 0")
+    parser.add_argument("--max_db_size_gb", type=float, default=20.0,
+                        help="Giới hạn dung lượng tối đa của file SQLite (GB). 0 = không giới hạn. Default: 20.0")
 
     # Filter (chỉ dùng khi --raw_data_dir)
     parser.add_argument("--min_length", type=int, default=5,
@@ -373,6 +381,7 @@ def main():
         threshold=args.threshold,
         batch_size=args.batch_size,
         db_path=db_path,
+        max_db_size_gb=args.max_db_size_gb,
     )
 
     if total_indexed == 0:

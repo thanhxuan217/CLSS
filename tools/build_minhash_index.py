@@ -6,52 +6,44 @@ build_minhash_index.py
 Build MinHash LSH index từ raw corpus hoặc file đã xử lý trước
 (output của preprocess_raw_corpus.py).
 
-Phiên bản tối ưu bộ nhớ — streaming + batch processing để chạy trên
-môi trường hạn chế RAM (Kaggle ~29 GB, Colab ~12 GB).
+★ DISK-BASED — dùng SQLite thay vì RAM.
+  Index + sentences nằm hoàn toàn trên disk.
+  RAM chỉ dùng SQLite page cache (~64 MB) bất kể corpus size.
+  → 46M câu, 100M câu, ... đều chạy được.
 
 Quy trình:
-  1. Stream câu từ file processed (1 dòng/câu) HOẶC raw dir
-  2. Xử lý theo batch: tạo shingles → MinHash → insert LSH
-  3. Giải phóng MinHash ngay sau khi insert (LSH chỉ giữ band hash)
-  4. Lưu index (pickle) + danh sách câu (text file, 1 dòng/câu)
+  1. Stream câu từ file processed HOẶC raw dir
+  2. Mỗi batch: tạo shingles → MinHash → insert vào SQLite
+  3. MinHash objects giải phóng ngay, SQLite ghi xuống disk
+  4. Sau khi insert xong: tạo index trên SQLite (1 lần)
 
-Lưu ý bộ nhớ:
-  MinHashLSH lưu band hash cho MỌI key trong RAM (~370 bytes/key).
-  Với 46M+ câu → cần 17+ GB chỉ riêng cho LSH → dễ OOM.
-  Dùng --max_sentences để giới hạn số câu index (mặc định 10M ≈ 3.7 GB).
+Output: 1 file .db duy nhất chứa cả LSH index + sentences.
 
 Usage:
-  # Từ file đã preprocess (khuyến nghị):
-  python tools/build_minhash_index.py \
-      --sentences_file data/processed/corpus_sentences.txt \
-      --output_index   data/index/minhash.pkl \
-      --output_sentences data/index/sentences.txt \
-      --max_sentences 10000000
-
-  # Từ raw directory:
-  python tools/build_minhash_index.py \
-      --raw_data_dir  data/raw \
-      --output_index  data/index/minhash.pkl \
-      --output_sentences data/index/sentences.txt
+  python tools/build_minhash_index.py \\
+      --sentences_file data/processed/corpus_sentences.txt \\
+      --output_db      data/index/minhash.db \\
+      --num_perm       128 \\
+      --ngram_size     2 \\
+      --threshold      0.3
 """
 
 import argparse
 import gc
 import hashlib
 import logging
-import os
-import pickle
 import re
-import sys
 import unicodedata
 from pathlib import Path
 
 try:
-    from datasketch import MinHash, MinHashLSH
+    from datasketch import MinHash
 except ImportError:
     raise ImportError(
         "Thư viện 'datasketch' chưa được cài. Chạy: pip install datasketch"
     )
+
+from sqlite_lsh import SqliteMinHashLSH
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -138,7 +130,7 @@ def iter_sentences_from_file(
     max_sentences: int = 0,
 ):
     """Generator — yield từng câu từ file processed (1 dòng = 1 câu).
-    
+
     Args:
         max_sentences: Dừng sau khi yield đủ số câu này. 0 = không giới hạn.
     """
@@ -161,7 +153,7 @@ def iter_sentences_from_raw_dir(
     max_sentences: int = 0,
 ):
     """Generator — yield từng câu hợp lệ từ raw dir (đã dedup).
-    
+
     Args:
         max_sentences: Dừng sau khi yield đủ số câu này. 0 = không giới hạn.
     """
@@ -194,174 +186,106 @@ def iter_sentences_from_raw_dir(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Index builder — batch streaming
+# Index builder — streaming vào SQLite
 # ──────────────────────────────────────────────────────────────────────────────
 
-def build_index_streaming(
+def build_index(
     sentence_iter,
     num_perm: int,
     ngram_size: int,
     threshold: float,
     batch_size: int,
-    sentences_out_path: Path,
-) -> tuple:
+    db_path: Path,
+) -> int:
     """
-    Build MinHashLSH index bằng streaming.
+    Build MinHash LSH index streaming vào SQLite.
 
-    Thay vì load toàn bộ sentences vào list rồi tạo MinHash:
-      - Đọc từng batch câu
-      - Tạo MinHash + insert vào LSH ngay
-      - Ghi câu ra file text ngay (không giữ trong RAM)
-      - Giải phóng MinHash objects sau mỗi batch
+    Mỗi batch:
+      - Tạo MinHash cho từng câu
+      - Insert vào SqliteMinHashLSH (ghi xuống disk)
+      - Giải phóng MinHash objects
+      - gc.collect()
+
+    RAM không tăng theo số câu — chỉ SQLite page cache.
 
     Returns:
-        (lsh, total_indexed) — LSH index + số câu đã index
+        total_indexed — số câu đã index
     """
-    lsh = MinHashLSH(threshold=threshold, num_perm=num_perm)
-
     logger.info(
-        "Building MinHash LSH index (streaming): "
+        "Building MinHash LSH index (SQLite disk-based): "
         "num_perm=%d | ngram=%d | threshold=%.2f | batch_size=%d",
         num_perm, ngram_size, threshold, batch_size,
     )
 
-    sentences_out_path.parent.mkdir(parents=True, exist_ok=True)
-    f_out = open(sentences_out_path, "w", encoding="utf-8")
+    lsh = SqliteMinHashLSH.create(db_path, threshold=threshold, num_perm=num_perm)
+    logger.info("  LSH params: b=%d bands, r=%d rows (b×r=%d ≤ num_perm=%d)",
+                lsh.b, lsh.r, lsh.b * lsh.r, num_perm)
 
     total = 0
     errors = 0
-    batch = []
+    batch_count = 0
 
-    try:
-        for sent in sentence_iter:
-            batch.append(sent)
-
-            if len(batch) >= batch_size:
-                indexed, errs = _process_batch(
-                    batch, total, lsh, num_perm, ngram_size, f_out
-                )
-                total += indexed
-                errors += errs
-                batch.clear()
-                gc.collect()
-
-                mem = get_mem_mb()
-                logger.info(
-                    "  … %d câu đã index | RAM ≈ %.0f MB", total, mem
-                )
-
-        # Batch cuối
-        if batch:
-            indexed, errs = _process_batch(
-                batch, total, lsh, num_perm, ngram_size, f_out
-            )
-            total += indexed
-            errors += errs
-            batch.clear()
-            gc.collect()
-
-    finally:
-        f_out.close()
-
-    if errors:
-        logger.warning("Bỏ qua %d câu do lỗi khi insert vào LSH", errors)
-
-    logger.info("Hoàn thành index: %d câu (bỏ qua %d lỗi)", total, errors)
-    return lsh, total
-
-
-def _process_batch(
-    batch: list[str],
-    start_idx: int,
-    lsh: MinHashLSH,
-    num_perm: int,
-    ngram_size: int,
-    f_out,
-) -> tuple:
-    """Xử lý 1 batch: tạo MinHash, insert LSH, ghi câu ra file."""
-    indexed = 0
-    errors = 0
-
-    for i, sent in enumerate(batch):
-        global_idx = start_idx + i
+    for sent in sentence_iter:
         shingles = make_shingles(sent, ngram_size)
         m = make_minhash(shingles, num_perm)
-        key = str(global_idx)
         try:
-            lsh.insert(key, m)
-            f_out.write(sent + "\n")
-            indexed += 1
-        except ValueError:
+            lsh.insert(str(total), m, sentence_text=sent)
+            total += 1
+        except Exception:
             errors += 1
+        del m, shingles
 
-        # Giải phóng MinHash ngay — LSH chỉ lưu band hash, không cần giữ
-        del m
-        del shingles
+        # Flush mỗi batch
+        if total % batch_size == 0:
+            lsh.flush()
+            gc.collect()
+            batch_count += 1
+            mem = get_mem_mb()
+            logger.info("  … %d câu đã index | RAM ≈ %.0f MB", total, mem)
 
-    return indexed, errors
+    # Flush phần còn lại
+    lsh.flush()
 
+    if errors:
+        logger.warning("Bỏ qua %d câu do lỗi khi insert", errors)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Save / Load
-# ──────────────────────────────────────────────────────────────────────────────
+    # Tạo index trên SQLite (chỉ 1 lần, sau khi insert xong)
+    logger.info("  Đang tạo SQLite index (có thể mất vài phút cho corpus lớn)...")
+    lsh.finalize()
 
-def save_index(lsh: MinHashLSH, index_path: str) -> None:
-    idx_p = Path(index_path)
-    idx_p.parent.mkdir(parents=True, exist_ok=True)
+    db_size_mb = Path(db_path).stat().st_size / (1024 * 1024)
+    logger.info("  Index DB: %.1f MB | %d câu", db_size_mb, total)
 
-    with open(idx_p, "wb") as f:
-        pickle.dump(lsh, f, protocol=pickle.HIGHEST_PROTOCOL)
-    size_mb = idx_p.stat().st_size / (1024 * 1024)
-    logger.info("LSH index đã lưu -> %s (%.1f MB)", idx_p, size_mb)
-
-
-def load_sentences_from_file(path: str) -> list[str]:
-    """Load sentences từ text file (dùng khi query)."""
-    sents = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            s = line.strip()
-            if s:
-                sents.append(s)
-    return sents
+    lsh.close()
+    return total
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Quick self-test
 # ──────────────────────────────────────────────────────────────────────────────
 
-def self_test(
-    lsh: MinHashLSH,
-    sentences_path: str,
-    num_perm: int,
-    ngram_size: int,
-) -> None:
+def self_test(db_path: str, num_perm: int, ngram_size: int) -> None:
     """Thử query 3 câu đầu để verify index hoạt động."""
     logger.info("─── Self-test (3 câu đầu) ───")
 
-    # Chỉ đọc 3 dòng đầu
-    test_sents = []
-    with open(sentences_path, "r", encoding="utf-8") as f:
-        for line in f:
-            s = line.strip()
-            if s:
-                test_sents.append(s)
-            if len(test_sents) >= 3:
-                break
+    lsh = SqliteMinHashLSH.open(db_path)
 
-    # Đọc đủ sentences để hiển thị kết quả (load lazy, chỉ khi self-test)
-    all_sents = load_sentences_from_file(sentences_path)
+    # Lấy 3 câu đầu
+    cur = lsh.conn.execute("SELECT id, text FROM sentences ORDER BY id LIMIT 3")
+    test_rows = cur.fetchall()
 
-    for sent in test_sents:
+    for row_id, sent in test_rows:
         shingles = make_shingles(sent, ngram_size)
         m = make_minhash(shingles, num_perm)
         results = lsh.query(m)
-        retrieved = [all_sents[int(r)] for r in results[:5] if int(r) < len(all_sents)]
+        # Lấy text cho top 5 results
+        top_keys = results[:5]
+        texts = lsh.get_sentences_batch(top_keys)
+        retrieved = [texts[k] for k in top_keys if k in texts]
         logger.info("Query: %s", sent[:60])
         logger.info("  → %d kết quả, ví dụ: %s", len(results), retrieved[:2])
 
-    del all_sents
-    gc.collect()
+    lsh.close()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -370,7 +294,8 @@ def self_test(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build MinHash LSH index cho Sino-Nom RAG (memory-efficient)"
+        description="Build MinHash LSH index cho Sino-Nom RAG "
+                    "(SQLite disk-based, không giới hạn RAM)"
     )
 
     # Input (chọn 1 trong 2)
@@ -386,14 +311,9 @@ def main():
 
     # Output
     parser.add_argument(
-        "--output_index",
+        "--output_db",
         required=True,
-        help="Đường dẫn lưu MinHashLSH index (pickle)",
-    )
-    parser.add_argument(
-        "--output_sentences",
-        required=True,
-        help="Đường dẫn lưu danh sách câu tương ứng (text file, 1 dòng/câu)",
+        help="Đường dẫn lưu SQLite database (chứa cả LSH index + sentences)",
     )
 
     # MinHash parameters
@@ -404,13 +324,11 @@ def main():
     parser.add_argument("--threshold", type=float, default=0.3,
                         help="Ngưỡng Jaccard similarity cho LSH bucket. Default: 0.3")
 
-    # Memory optimization
+    # Memory / performance
     parser.add_argument("--batch_size", type=int, default=50_000,
-                        help="Số câu xử lý mỗi batch. Giảm nếu OOM. Default: 50000")
-    parser.add_argument("--max_sentences", type=int, default=10_000_000,
-                        help="Số câu tối đa để index. LSH dùng ~370 bytes/câu trong RAM. "
-                             "10M ≈ 3.7 GB, 20M ≈ 7.4 GB. Đặt 0 = không giới hạn. "
-                             "Default: 10000000")
+                        help="Số câu mỗi batch flush xuống SQLite. Default: 50000")
+    parser.add_argument("--max_sentences", type=int, default=0,
+                        help="Số câu tối đa để index. 0 = không giới hạn. Default: 0")
 
     # Filter (chỉ dùng khi --raw_data_dir)
     parser.add_argument("--min_length", type=int, default=5,
@@ -424,7 +342,7 @@ def main():
 
     args = parser.parse_args()
 
-    # ── Tạo sentence iterator (streaming, không load hết vào RAM) ──
+    # ── Tạo sentence iterator ──
     max_s = args.max_sentences
     if args.sentences_file:
         sent_path = Path(args.sentences_file)
@@ -432,49 +350,41 @@ def main():
         total_lines = count_lines(sent_path)
         logger.info("Tổng câu trong file: %d", total_lines)
         if max_s > 0:
-            effective = min(total_lines, max_s)
-            est_ram = effective * 370 / (1024 * 1024)
-            logger.info(
-                "Giới hạn index: %d câu (--max_sentences=%d) | "
-                "RAM ước tính cho LSH: ~%.1f GB",
-                effective, max_s, est_ram / 1024,
-            )
+            logger.info("Giới hạn: %d câu (--max_sentences)", max_s)
         sentence_iter = iter_sentences_from_file(
             sent_path, args.encoding, max_sentences=max_s
         )
     else:
         if max_s > 0:
-            logger.info("Giới hạn index: %d câu (--max_sentences)", max_s)
+            logger.info("Giới hạn: %d câu (--max_sentences)", max_s)
         sentence_iter = iter_sentences_from_raw_dir(
             Path(args.raw_data_dir), args.min_length, args.max_length,
             args.encoding, max_sentences=max_s,
         )
 
-    # ── Build index (streaming) ──
-    out_sentences = Path(args.output_sentences)
-    lsh, total_indexed = build_index_streaming(
+    # ── Build index ──
+    db_path = Path(args.output_db)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    total_indexed = build_index(
         sentence_iter=sentence_iter,
         num_perm=args.num_perm,
         ngram_size=args.ngram_size,
         threshold=args.threshold,
         batch_size=args.batch_size,
-        sentences_out_path=out_sentences,
+        db_path=db_path,
     )
 
     if total_indexed == 0:
         logger.error("Không có câu nào được index. Kiểm tra lại input.")
         return
 
-    # ── Save index ──
-    save_index(lsh, args.output_index)
-    logger.info("Sentence list đã lưu -> %s", out_sentences)
-
     # ── Self-test ──
     if not args.no_self_test:
-        self_test(lsh, str(out_sentences), args.num_perm, args.ngram_size)
+        self_test(str(db_path), args.num_perm, args.ngram_size)
 
     mem = get_mem_mb()
-    logger.info("✓ Hoàn thành! Tổng: %d câu | Peak RAM ≈ %.0f MB", total_indexed, mem)
+    logger.info("✓ Hoàn thành! Tổng: %d câu | RAM ≈ %.0f MB", total_indexed, mem)
 
 
 if __name__ == "__main__":

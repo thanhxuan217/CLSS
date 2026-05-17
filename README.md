@@ -55,6 +55,7 @@ CLSS/
 ├── tools/                   # Sino-Nom data pipeline scripts
 │   ├── preprocess_raw_corpus.py   # Bước 1: Tiền xử lý raw corpus
 │   ├── build_minhash_index.py     # Bước 2: Build MinHash LSH index
+│   ├── sqlite_lsh.py              # SQLite-backed LSH engine (dùng bởi build + generate)
 │   ├── generate_doc_dataset.py    # Bước 3: Sinh dataset *_doc
 │   └── bert_scoring.py            # (Legacy) BertScore ranking cho English
 ├── config/
@@ -103,7 +104,7 @@ Raw .txt corpus (có dấu câu)
 [Bước 2a] preprocess_raw_corpus.py  →  data/processed/corpus_sentences.txt
         │
         ▼
-[Bước 2b] build_minhash_index.py  →  data/index/{minhash.pkl, sentences.txt}
+[Bước 2b] build_minhash_index.py  →  data/index/minhash.db  (SQLite, disk-based)
         │
         ▼
 [Bước 3] generate_doc_dataset.py  →  data/sino_nom_punct_doc/{train,dev,test}.txt
@@ -186,16 +187,17 @@ python tools/preprocess_raw_corpus.py \
     --raw_data_dir  data/raw \
     --output_file   data/processed/corpus_sentences.txt
 
-# Build index (streaming, memory-efficient)
+# Build index (SQLite disk-based, không giới hạn RAM)
 python tools/build_minhash_index.py \
-    --sentences_file    data/processed/corpus_sentences.txt \
-    --output_index      data/index/minhash.pkl \
-    --output_sentences  data/index/sentences.txt \
-    --num_perm          128 \
-    --ngram_size        2 \
-    --threshold         0.3 \
-    --batch_size        50000
+    --sentences_file data/processed/corpus_sentences.txt \
+    --output_db      data/index/minhash.db \
+    --num_perm       128 \
+    --ngram_size     2 \
+    --threshold      0.3
 ```
+
+> **Lưu ý:** Index dùng **SQLite** thay vì giữ trong RAM. Bất kể corpus có 1M hay 100M câu,
+> RAM chỉ dùng ~64 MB (SQLite page cache). Tất cả band hash tables + sentences nằm trên disk.
 
 ---
 
@@ -205,13 +207,10 @@ python tools/build_minhash_index.py \
 python tools/generate_doc_dataset.py \
     --input_dir      data/sino_nom_punct \
     --output_dir     data/sino_nom_punct_doc \
-    --index_path     data/index/minhash.pkl \
-    --sentences_path data/index/sentences.txt \
+    --index_db       data/index/minhash.db \
     --top_k          5 \
     --min_jaccard    0.1 \
-    --max_jaccard    0.95 \
-    --num_perm       128 \
-    --ngram_size     2
+    --max_jaccard    0.95
 ```
 
 Output: mỗi câu gốc được nối thêm các câu retrieved, đánh dấu tag `S-X`:

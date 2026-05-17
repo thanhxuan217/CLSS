@@ -3,52 +3,41 @@
 """
 generate_doc_dataset.py
 ───────────────────────
-Query MinHash LSH index để tìm câu tương tự và sinh dataset *_doc
+Query MinHash LSH index (SQLite) để tìm câu tương tự và sinh dataset *_doc
 (CoNLL column format) cho CLSS multi-view training.
 
 Quy trình:
   1. Đọc dataset CoNLL column format (train/dev/test)
-  2. Với mỗi câu:
+  2. Mở SQLite index (nhẹ, chỉ dùng ~64 MB RAM)
+  3. Với mỗi câu:
      a. Tạo MinHash signature
-     b. Query LSH index → candidates
+     b. Query SQLite LSH → candidates
      c. Tính Jaccard similarity thực tế, rank kết quả
-     d. Lọc: loại câu quá giống (Jaccard > max_jaccard) và quá khác (< min_jaccard)
-  3. Ghép: câu gốc + <EOS> S-X + retrieved sentences (tagged S-X)
-  4. Xuất dataset *_doc ở CoNLL column format
-
-Output format (mỗi "document"):
-  -DOCSTART- O
-
-  Token1  B-PER
-  Token2  O
-  <EOS>   S-X
-  RetrievedToken1  S-X
-  ...
-
-  -DOCSTART- O
-  ...
+     d. Lọc: loại câu quá giống (> max_jaccard) và quá khác (< min_jaccard)
+  4. Ghép: câu gốc + <EOS> S-X + retrieved sentences (tagged S-X)
+  5. Xuất dataset *_doc ở CoNLL column format
 
 Usage:
   python tools/generate_doc_dataset.py \\
-      --input_dir  data/sino_nom \\
-      --output_dir data/sino_nom_doc \\
-      --index_path data/index/minhash.pkl \\
-      --sentences_path data/index/sentences.pkl \\
-      [--top_k 5] [--max_jaccard 0.95] [--min_jaccard 0.1] \\
-      [--num_perm 128] [--ngram_size 2]
+      --input_dir      data/sino_nom_punct \\
+      --output_dir     data/sino_nom_punct_doc \\
+      --index_db       data/index/minhash.db \\
+      --top_k          5 \\
+      --min_jaccard    0.1 \\
+      --max_jaccard    0.95
 """
 
 import argparse
+import gc
 import logging
-import os
-import pickle
 from pathlib import Path
-from typing import Optional
 
 try:
-    from datasketch import MinHash, MinHashLSH
+    from datasketch import MinHash
 except ImportError:
     raise ImportError("Cài datasketch: pip install datasketch")
+
+from sqlite_lsh import SqliteMinHashLSH
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -134,8 +123,6 @@ def write_conll_doc(
 
                 # Các câu retrieved
                 for ret_sent in retrieved_sents:
-                    # Tách theo khoảng trắng; Classical Chinese thường không có space
-                    # nhưng sau preprocess có thể có
                     for char_token in ret_sent.replace(" ", ""):
                         f.write(f"{char_token}\t{retrieved_tag}\n")
 
@@ -175,8 +162,7 @@ def sentence_text(sent: Sentence) -> str:
 
 def retrieve_for_sentence(
     query_text: str,
-    lsh: MinHashLSH,
-    sentences: list[str],
+    lsh: SqliteMinHashLSH,
     num_perm: int,
     ngram_size: int,
     top_k: int,
@@ -184,7 +170,7 @@ def retrieve_for_sentence(
     max_jaccard: float,
 ) -> list[str]:
     """
-    Query LSH, tính Jaccard thực, lọc và trả về top-K câu tương tự.
+    Query SQLite LSH, tính Jaccard thực, lọc và trả về top-K câu tương tự.
     Loại bỏ câu trùng hoàn toàn với query.
     """
     shingles_q = make_shingles(query_text, ngram_size)
@@ -194,12 +180,14 @@ def retrieve_for_sentence(
     if not candidate_keys:
         return []
 
+    # Batch lấy sentences từ SQLite (1 query thay vì N queries)
+    cand_texts = lsh.get_sentences_batch(candidate_keys)
+
     scored: list[tuple[float, str]] = []
     for key in candidate_keys:
-        idx = int(key)
-        cand_text = sentences[idx]
-        if cand_text == query_text:
-            continue  # Bỏ chính nó
+        cand_text = cand_texts.get(key)
+        if cand_text is None or cand_text == query_text:
+            continue
 
         shingles_c = make_shingles(cand_text, ngram_size)
         mh_c = make_minhash(shingles_c, num_perm)
@@ -233,8 +221,7 @@ def retrieve_for_sentence(
 def process_split(
     input_file: Path,
     output_file: Path,
-    lsh: MinHashLSH,
-    corpus_sentences: list[str],
+    lsh: SqliteMinHashLSH,
     num_perm: int,
     ngram_size: int,
     top_k: int,
@@ -254,7 +241,7 @@ def process_split(
     for i, sent in enumerate(sentences):
         q_text = sentence_text(sent)
         retrieved = retrieve_for_sentence(
-            q_text, lsh, corpus_sentences,
+            q_text, lsh,
             num_perm, ngram_size, top_k, min_jaccard, max_jaccard,
         )
         retrieved_groups.append(retrieved)
@@ -282,25 +269,23 @@ def process_split(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Sinh dataset *_doc dùng MinHash LSH retrieval"
+        description="Sinh dataset *_doc dùng MinHash LSH retrieval (SQLite)"
     )
     parser.add_argument("--input_dir", required=True,
                         help="Thư mục dataset gốc (CoNLL column format)")
     parser.add_argument("--output_dir", required=True,
                         help="Thư mục xuất dataset *_doc")
-    parser.add_argument("--index_path", required=True,
-                        help="File MinHashLSH index (.pkl)")
-    parser.add_argument("--sentences_path", required=True,
-                        help="File danh sách câu corpus (.txt hoặc .pkl)")
+    parser.add_argument("--index_db", required=True,
+                        help="SQLite database chứa LSH index (.db)")
 
     parser.add_argument("--top_k", type=int, default=5,
                         help="Số câu retrieved tối đa mỗi câu gốc. Default: 5")
     parser.add_argument("--max_jaccard", type=float, default=0.95,
-                        help="Loại câu có Jaccard > ngưỡng này (quá giống). Default: 0.95")
+                        help="Loại câu có Jaccard > ngưỡng này. Default: 0.95")
     parser.add_argument("--min_jaccard", type=float, default=0.1,
-                        help="Loại câu có Jaccard < ngưỡng này (quá khác). Default: 0.1")
-    parser.add_argument("--num_perm", type=int, default=128,
-                        help="Số permutation MinHash (phải khớp với index). Default: 128")
+                        help="Loại câu có Jaccard < ngưỡng này. Default: 0.1")
+    parser.add_argument("--num_perm", type=int, default=0,
+                        help="Override num_perm (0 = dùng từ DB metadata). Default: 0")
     parser.add_argument("--ngram_size", type=int, default=2,
                         help="Kích thước character n-gram. Default: 2")
 
@@ -315,33 +300,20 @@ def main():
 
     args = parser.parse_args()
 
-    # Load index
-    logger.info("Đang tải LSH index từ: %s", args.index_path)
-    with open(args.index_path, "rb") as f:
-        lsh: MinHashLSH = pickle.load(f)
+    # ── Mở SQLite index ──
+    logger.info("Đang mở LSH index từ: %s", args.index_db)
+    lsh = SqliteMinHashLSH.open(args.index_db)
 
-    logger.info("Đang tải sentence list từ: %s", args.sentences_path)
-    sent_path = Path(args.sentences_path)
-    if sent_path.suffix == ".pkl":
-        # Legacy pickle format
-        with open(sent_path, "rb") as f:
-            corpus_sentences: list[str] = pickle.load(f)
-    else:
-        # New text format (1 dòng = 1 câu) — tiết kiệm RAM hơn
-        corpus_sentences = []
-        with open(sent_path, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                s = line.strip()
-                if s:
-                    corpus_sentences.append(s)
-
-    logger.info("Index: %d câu trong corpus", len(corpus_sentences))
+    total = lsh.total_sentences()
+    num_perm = args.num_perm if args.num_perm > 0 else lsh.num_perm
+    logger.info("Index: %d câu | num_perm=%d | b=%d | r=%d",
+                total, num_perm, lsh.b, lsh.r)
 
     in_dir = Path(args.input_dir)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Xử lý từng split
+    # ── Xử lý từng split ──
     for split_name in args.splits:
         in_file = in_dir / split_name
         out_file = out_dir / split_name
@@ -354,8 +326,7 @@ def main():
             input_file=in_file,
             output_file=out_file,
             lsh=lsh,
-            corpus_sentences=corpus_sentences,
-            num_perm=args.num_perm,
+            num_perm=num_perm,
             ngram_size=args.ngram_size,
             top_k=args.top_k,
             min_jaccard=args.min_jaccard,
@@ -364,6 +335,7 @@ def main():
             tag_col=args.tag_col,
         )
 
+    lsh.close()
     logger.info("✓ Hoàn thành! Dataset *_doc đã lưu tại: %s", out_dir)
 
 

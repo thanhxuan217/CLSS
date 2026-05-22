@@ -3004,13 +3004,17 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 model_max_length = 510
             self.add_document_embeddings_v2(sentences, max_sequence_length = model_max_length, batch_size = 32 if not hasattr(self,'doc_batch_size') else self.doc_batch_size)
         elif self.ext_doc:
-            orig_sentences = [sentence.orig_sent for idx, sentence in enumerate(sentences)]
-            self._add_embeddings_to_sentences(orig_sentences)
+            orig_sentences = [sentence.orig_sent for idx, sentence in enumerate(sentences) if hasattr(sentence, 'orig_sent')]
+            if len(orig_sentences) > 0:
+                self._add_embeddings_to_sentences(orig_sentences)
             for sent_id, sentence in enumerate(sentences):
-                orig_sentence=orig_sentences[sent_id]
-                for token_id, token in enumerate(sentence):
-                    token._embeddings[self.name] = orig_sentence[token_id]._embeddings[self.name]
-            store_embeddings(orig_sentences, 'none')
+                if hasattr(sentence, 'orig_sent'):
+                    orig_sentence = sentence.orig_sent
+                    for token_id, token in enumerate(sentence):
+                        if token_id < len(orig_sentence):
+                            token._embeddings[self.name] = orig_sentence[token_id]._embeddings[self.name]
+            if len(orig_sentences) > 0:
+                store_embeddings(orig_sentences, 'none')
             
         elif not hasattr(self,'document_extraction') or not self.document_extraction:
             self._add_embeddings_to_sentences(sentences)

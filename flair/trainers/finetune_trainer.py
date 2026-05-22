@@ -330,11 +330,14 @@ class ModelFinetuner(ModelDistiller):
 				target_corpus_id = self.corpus2id[target_corpus_name]
 				source_corpus_id = self.corpus2id[source_corpus_name]
 				for sent_id, sentence in enumerate(self.corpus.train_list[target_corpus_id]):
-					sentence.orig_sent=self.corpus.train_list[source_corpus_id][sent_id]
+					if sent_id < len(self.corpus.train_list[source_corpus_id]):
+						sentence.orig_sent=self.corpus.train_list[source_corpus_id][sent_id]
 				for sent_id, sentence in enumerate(self.corpus.dev_list[target_corpus_id]):
-					sentence.orig_sent=self.corpus.dev_list[source_corpus_id][sent_id]
+					if sent_id < len(self.corpus.dev_list[source_corpus_id]):
+						sentence.orig_sent=self.corpus.dev_list[source_corpus_id][sent_id]
 				for sent_id, sentence in enumerate(self.corpus.test_list[target_corpus_id]):
-					sentence.orig_sent=self.corpus.test_list[source_corpus_id][sent_id]
+					if sent_id < len(self.corpus.test_list[source_corpus_id]):
+						sentence.orig_sent=self.corpus.test_list[source_corpus_id][sent_id]
 			if use_unlabeled_data:
 				unlabeled_corpus_id = self.corpus2id[unlabel_corpus_name]
 				for sent_id, sentence in enumerate(self.corpus.train_list[unlabeled_corpus_id]):

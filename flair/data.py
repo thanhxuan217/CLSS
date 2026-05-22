@@ -638,6 +638,7 @@ class Sentence(DataPoint):
                 iob2(tags)
                 tags = iob_iobes(tags)
         except:
+            pass
 
         for index, tag in enumerate(tags):
             self.tokens[index].add_tag(tag_type, tag)

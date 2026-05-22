@@ -928,7 +928,7 @@ class ColumnDataset(FlairDataset):
                     sentence: Sentence = Sentence()
 
                 else:
-                    fields: List[str] = re.split("\s+", line)
+                    fields: List[str] = re.split(r"\s+", line)
                     token = Token(fields[self.text_column])
                     for column in column_name_map:
                         if len(fields) > column:
@@ -987,7 +987,7 @@ class ColumnDataset(FlairDataset):
                                 )
                             break
                     else:
-                        fields: List[str] = re.split("\s+", line)
+                        fields: List[str] = re.split(r"\s+", line)
                         token = Token(fields[self.text_column])
                         for column in self.column_name_map:
                             if len(fields) > column:

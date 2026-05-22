@@ -101,7 +101,7 @@ class Params(object):
         for params_file in params_file_list:
             with open(params_file, encoding='utf-8') as f:
                 if params_file.endswith('.yaml'):
-                    dict_merge.dict_merge(params_dict, yaml.load(f))
+                    dict_merge.dict_merge(params_dict, yaml.safe_load(f))
                 elif params_file.endswith('.json'):
                     params_dict = json.load(f)
                 else:

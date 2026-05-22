@@ -5,8 +5,8 @@ Contact: wangxy1@shanghaitech.edu.cn
 """
 
 from .distillation_trainer import *
+from torch.optim import AdamW
 from transformers import (
-	AdamW,
 	get_linear_schedule_with_warmup,
 )
 from flair.models.biaffine_attention import BiaffineAttention, BiaffineFunction

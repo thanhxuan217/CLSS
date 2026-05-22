@@ -186,6 +186,7 @@ class EnsembleModel(flair.nn.Model):
 		if self.relearn_embeddings:
 			self.embedding2nn = torch.nn.Linear(rnn_input_dim + candidates, rnn_input_dim + candidates)
 		if candidates == -1:
+			pass
 		self.candidates = candidates
 		self.hidden2score = torch.nn.Linear(rnn_input_dim + candidates, candidates)
 

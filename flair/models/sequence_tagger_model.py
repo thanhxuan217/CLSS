@@ -1038,6 +1038,7 @@ class SequenceTagger(flair.nn.Model):
 				self.sent_feats=self.embeddings.embeddings[0].pooled_output
 		if self.enhanced_crf:
 			if self.debug:
+				pass
 			self.set_enhanced_transitions(sentences)
 
 		return features
@@ -1998,6 +1999,7 @@ class FastSequenceTagger(SequenceTagger):
 				if self.calculate_l2_loss:
 					masked_representations[i,:masked_lengths[i],:] = selected_representations[i].masked_select(temp_rep_mask[i]).view(masked_lengths[i],-1)
 			except:
+				pass
 			# masked_tag_list[i,:masked_lengths[i]] = tag_list[i].masked_select(select_mask[i])
 			new_mask[i,:masked_lengths[i]] = select_mask[i].masked_select(select_mask[i])
 		
@@ -2017,6 +2019,7 @@ class FastSequenceTagger(SequenceTagger):
 			try:
 				l2_loss = torch.nn.functional.mse_loss(orig_representations,masked_representations, reduction='none') * new_mask.unsqueeze(-1)
 			except:
+				pass
 			if self.sentence_level_loss or self.use_crf:
 				l2_loss = l2_loss.sum()/l2_loss.shape[0]/masked_representations.shape[-1]
 			else:
@@ -2028,6 +2031,7 @@ class FastSequenceTagger(SequenceTagger):
 		try:
 			assert (new_mask == self.mask).all()
 		except:
+			pass
 		if self.use_crf:
 			if self.distill_exact:
 				partition_score = self._forward_alg(orig_features, masked_lengths, T=self.temperature)
@@ -2450,6 +2454,7 @@ class FastSequenceTagger(SequenceTagger):
 					try:
 						masked_features[i,:masked_lengths[i],:] = features[i].masked_select(temp_mask[i]).view(masked_lengths[i],-1)
 					except:
+						pass
 					masked_tag_list[i,:masked_lengths[i]] = tag_list[i].masked_select(select_mask[i])
 					crf_mask[i,:masked_lengths[i]] = mask[i].masked_select(select_mask[i])
 
@@ -2527,6 +2532,7 @@ class FastSequenceTagger(SequenceTagger):
 		try:
 			pad_stop_tags = pad_stop_tags.cuda()*transition_mask2.long()+(1-transition_mask2.long())*self.tag_dictionary.get_idx_for_item(STOP_TAG)
 		except:
+			pass
 		
 		my_emission=torch.gather(feats,2,tags.unsqueeze(-1))*mask.unsqueeze(-1)
 		

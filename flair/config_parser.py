@@ -507,10 +507,12 @@ class ConfigParser:
 				if self.config[self.target]['systems'][filename] != corpus_name:
 					continue
 				if len(self.corpus.dev_list[idx]) != len(dev):
+					pass
 				for sentid, sentence in enumerate(self.corpus.dev_list[idx]):
 
 					for tokenid, token in enumerate(sentence):
 						if len(sentence) != len(dev[sentid]):
+							pass
 						if not hasattr(token, 'system_preds'):
 							token.system_preds=[]
 							token.system_scores=[]
@@ -518,10 +520,12 @@ class ConfigParser:
 						token.system_scores.append(float(dev[sentid][tokenid].tags['score']._value))
 						
 				if len(self.corpus.test_list[idx]) != len(test):
+					pass
 				for sentid, sentence in enumerate(self.corpus.test_list[idx]):
 
 					for tokenid, token in enumerate(sentence):
 						if len(sentence) != len(test[sentid]):
+							pass
 						if not hasattr(token, 'system_preds'):
 							token.system_preds=[]
 							token.system_scores=[]

@@ -186,7 +186,7 @@ class prepared_dataloader():
 			with open(self.config[pathname]) as f:
 				self.examples = [json.loads(jsonline) for jsonline in f.readlines()]
 		else:
-
+			pass
 		self.ner_types = self.config['ner_types']
 		self.ner_maps = {ner: (i + 1) for i, ner in enumerate(self.ner_types)}
 		self.char_dict = load_char_dict(config["char_vocab_path"])
@@ -198,6 +198,7 @@ class prepared_dataloader():
 				batch = (self.tensorize_example(example), example)
 				batches.append(batch)
 		else:
+			pass
 		return batches
 	@property
 	def model_sizes(self):

@@ -604,6 +604,7 @@ class LstmCell(nn.Module):
 
 	def _orthonormal_initializer(self, weights, gain=1.0):
 		if len(weights.shape)>2:
+			pass
 		device = weights.device
 		dtype = weights.dtype
 		shape0, shape1 = get_shape(weights)

@@ -1045,6 +1045,7 @@ class UniversalDependenciesDataset(FlairDataset):
                 # if 'unlabel' in str(path_to_conll_file) and line_count>92352:
                 if line == "":
                     if (len(sentence)==1 and sentence[0].text==root_tag):
+                        pass
                     if len(sentence) > 0 and not (len(sentence)==1 and sentence[0].text==root_tag):
                         self.total_sentence_count += 1
                         if self.in_memory:

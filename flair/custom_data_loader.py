@@ -254,7 +254,9 @@ class ColumnDataLoader:
 					for val in system_preds:
 						assert num_candiates == len(val)
 					if tag_type == 'enhancedud' or tag_type == 'srl':
+						pass
 					elif tag_type == 'dependency':
+						pass
 					else:
 						gold_preds = [token.get_tag(tag_type).value for token in sentence]
 						tag_template = torch.zeros(max_len, num_candiates,device='cpu')
@@ -324,6 +326,7 @@ class ColumnDataLoader:
 						try:
 							tag_idx = tag_dictionary.item2idx[str(span.tag).encode('utf-8')]
 						except:
+							pass
 						n_tokens = len(span.tokens)
 						if n_tokens > 1:
 							start_idx = span.tokens[0].idx
@@ -334,6 +337,7 @@ class ColumnDataLoader:
 							arc_template[end_idx-1, start_idx-1] = 1
 							rel_template[end_idx-1, start_idx-1] = tag_idx
 						except:
+							pass
 					setattr(sentence,tag_type+'_arc_tags',arc_template)
 					setattr(sentence,tag_type+'_rel_tags',rel_template)
 				else:

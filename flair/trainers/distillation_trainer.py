@@ -737,6 +737,7 @@ class ModelDistiller(ModelTrainer):
 							try:
 								sentence.set_teacher_sentfeats(teacher.sent_feats[idx],self.embeddings_storage_mode)
 							except:
+								pass
 						if not faster:
 							sentence.set_teacher_prediction(logits[idx][:len(sentence)], self.embeddings_storage_mode)
 						else:
@@ -1201,12 +1202,14 @@ class ModelDistiller(ModelTrainer):
 			try: 
 				assert len(doc_dict[key])==len(sentences_emb)
 			except:
+				pass
 			for i, sentence in enumerate(doc_dict[key]):
 				for token, token_idx in zip(sentence.tokens, range(len(sentence.tokens))):
 					try:
 						word_embedding = sentences_emb[i][token_idx]
 						word_embedding = torch.from_numpy(word_embedding).view(-1)
 					except:
+						pass
 
 					token.set_embedding(embedding.name, word_embedding)
 				store_embeddings([sentence], 'cpu')

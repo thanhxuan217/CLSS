@@ -1427,6 +1427,7 @@ class ModelFinetuner(ModelDistiller):
 							try:
 								sentence.set_teacher_sentfeats(teacher.sent_feats[idx],self.distill_storage_mode)
 							except:
+								pass
 						if not faster:
 							if self.model.tag_type=="dependency":
 								if self.model.distill_factorize:
@@ -1852,6 +1853,7 @@ class ModelFinetuner(ModelDistiller):
 					lens=posterior_lens.copy()
 					targets=posteriors.copy()
 				except:
+					pass
 			if self.model.distill_exact:
 				# ===== debug ====
 				# targets=[x._teacher_prediction for x in batch]
@@ -1980,6 +1982,7 @@ class ModelFinetuner(ModelDistiller):
 					try:
 						batch.teacher_features['posteriors']=torch.stack([sentence.get_teacher_posteriors() for sentence in batch],0).cpu()
 					except:
+						pass
 					# lens=[len(x) for x in batch]
 					# posteriors = batch.teacher_features['posteriors']
 					# if max(lens) == posteriors.shape[-1]:

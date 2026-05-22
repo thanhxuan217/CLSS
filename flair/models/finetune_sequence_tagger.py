@@ -115,6 +115,7 @@ class ParallelSequenceTagger(FastsequenceTagger):
         return loss
 
     def forward_preprocess(self, data_points: Union[List[Sentence], Sentence]):
+        pass
 
     def distillation_forward_preprocess(self, data_points: Union[List[Sentence], Sentence], teacher_data_points: Union[List[Sentence], Sentence]=None, teacher=None, train_with_professor=False):
     	features = self.forward_preprocess(data_points)
@@ -210,6 +211,7 @@ class ParallelSequenceTagger(FastsequenceTagger):
                         try:
                             teacher_attention = self.biaffine(self.sent_feats.view(-1,self.sent_feats.shape[-1]),teacher_sentfeats.view(-1,teacher_sentfeats.shape[-2],teacher_sentfeats.shape[-1]))
                         except:
+                            pass
                         teacher_attention = teacher_attention.view(len(features),max_len,-1)
                         teacher_features = torch.stack([sentence.get_teacher_prediction(pooling='token_weighted', weight=teacher_attention[idx]) for idx,sentence in enumerate(data_points)],0)
                     else:    

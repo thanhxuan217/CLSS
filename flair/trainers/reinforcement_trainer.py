@@ -1249,6 +1249,7 @@ class ReinforcementTrainer(ModelDistiller):
 					lens=posterior_lens.copy()
 					targets=posteriors.copy()
 				except:
+					pass
 			if is_token_att:
 				sentfeats=[x._teacher_sentfeats for x in batch]
 				sentfeats_lens=[len(x[0]) for x in sentfeats]
@@ -1395,6 +1396,7 @@ class ReinforcementTrainer(ModelDistiller):
 				log.info(f"Setting embedding mask to the best action: {self.best_action}")
 				print(name_list)
 		except:
+			pass
 
 		# Since there are a lot of embeddings, we keep these embeddings to cpu in order to avoid OOM
 		for name, module in self.model.named_modules():

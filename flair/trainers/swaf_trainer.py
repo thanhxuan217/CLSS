@@ -883,6 +883,7 @@ class SWAFTrainer(ModelDistiller):
 					lens=posterior_lens.copy()
 					targets=posteriors.copy()
 				except:
+					pass
 			if self.model.distill_exact:
 				# ===== debug ====
 				# targets=[x._teacher_prediction for x in batch]
@@ -1011,6 +1012,7 @@ class SWAFTrainer(ModelDistiller):
 					try:
 						batch.teacher_features['posteriors']=torch.stack([sentence.get_teacher_posteriors() for sentence in batch],0).cpu()
 					except:
+						pass
 					# lens=[len(x) for x in batch]
 					# posteriors = batch.teacher_features['posteriors']
 					# if max(lens) == posteriors.shape[-1]:

@@ -117,6 +117,7 @@ class ParallelSequenceTagger(FastsequenceTagger):
         return loss
 
     def forward_preprocess(self, data_points: Union[List[Sentence], Sentence]):
+        pass
 
     def distillation_forward_preprocess(self, data_points: Union[List[Sentence], Sentence], teacher_data_points: Union[List[Sentence], Sentence]=None, teacher=None, train_with_professor=False):
     	features = self.forward_preprocess(data_points)

@@ -53,6 +53,7 @@ def predict_embeddings(self,doc_dict,embedding,file_name):
         try: 
             assert len(doc_dict[key])==len(sentences_emb)
         except:
+            pass
         for i, sentence in enumerate(doc_dict[key]):
             for token, token_idx in zip(sentence.tokens, range(len(sentence.tokens))):
                 word_embedding = sentences_emb[i][token_idx]

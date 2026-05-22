@@ -1873,6 +1873,7 @@ class SemanticDependencyParser1(flair.nn.Model):
 					try:
 						Z += _exp(DPC[key]/T)
 					except:
+						pass
 			# partition_functions[m-1] = float(Z)
 			prob = max(float(_exp(DPC[(O, m)]/T)/Z), 0)
 
@@ -2135,6 +2136,7 @@ class SemanticDependencyParser1(flair.nn.Model):
 
 						bioes_prob_sent[m-1, tag_indices[(prefix, role)]] = prob
 			except:
+				pass
 
 
 		return bioes_prob_sent

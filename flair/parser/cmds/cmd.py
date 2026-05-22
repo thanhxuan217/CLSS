@@ -193,6 +193,7 @@ class CMD(object):
             '''
             arc_loss = (arc_loss*binary_mask).sum()/binary_mask.sum()
             if torch.isnan(arc_loss).any():
+                pass
             arc_scores, arcs = arc_scores[mask], arcs[mask]
         else:
             arc_scores, arcs = arc_scores[mask], arcs[mask]

@@ -7,7 +7,18 @@ cache_root = os.path.expanduser(os.path.join("~", ".flair"))
 # global variable: device
 device = None
 if torch.cuda.is_available():
-    device = torch.device("cuda:0")
+    try:
+        # Test that CUDA kernels actually work on this GPU
+        _test = torch.zeros(1, device=torch.device("cuda:0"))
+        del _test
+        device = torch.device("cuda:0")
+    except Exception as _e:
+        import logging as _logging
+        _logging.warning(
+            f"CUDA is available but not functional (kernel incompatibility): {_e}. "
+            f"Falling back to CPU."
+        )
+        device = torch.device("cpu")
 else:
     device = torch.device("cpu")
 

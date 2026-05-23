@@ -70,7 +70,8 @@ punct:
 
 # ─── Training ─────────────────────────────────────────────────────────────────
 train:
-  fine_tune_mode: true
+  fine_tune_mode: false
+  patience: 3
   embeddings_storage_mode: none    # Tiết kiệm VRAM
 
   # Optimizer

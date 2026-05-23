@@ -105,7 +105,8 @@ targets: ner
 teacher_annealing: false
 train:
   embeddings_storage_mode: none
-  fine_tune_mode: true
+  fine_tune_mode: false
+  patience: 3
   gradient_accumulation_steps: 2
   learning_rate: 5.0e-06
   lr_rate: 10000

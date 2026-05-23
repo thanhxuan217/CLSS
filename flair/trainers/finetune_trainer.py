@@ -876,6 +876,7 @@ class ModelFinetuner(ModelDistiller):
 					total_sent+=len(student_input)
 					multi_view_training = False
 					is_unlabeled_batch = False
+					loss = 0
 					try:
 						with caster:
 							if self.distill_mode:

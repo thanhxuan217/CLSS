@@ -5,9 +5,13 @@
 # Added: datasketch (MinHash LSH RAG)
 
 # ── Core ML ────────────────────────────────────────────────────────────────────
---extra-index-url https://download.pytorch.org/whl/cu124
-torch>=2.0.0
-torchvision>=0.15.0
+# Note for Kaggle users: Kaggle's environment already comes with a pre-configured 
+# and hardware-optimized version of PyTorch. Installing generic PyTorch wheels 
+# (like cu124) on Kaggle often causes "no kernel image is available" errors on 
+# their P100/T4 GPUs. Therefore, torch and torchvision are commented out below.
+# --extra-index-url https://download.pytorch.org/whl/cu124
+# torch>=2.0.0
+# torchvision>=0.15.0
 transformers>=4.30.0
 numpy>=1.24.0
 scipy>=1.10.0

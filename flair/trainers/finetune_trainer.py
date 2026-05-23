@@ -822,6 +822,7 @@ class ModelFinetuner(ModelDistiller):
 				# process mini-batches
 				batch_time = 0
 				total_sent=0
+				decode_time = 1e-8
 				if self.distill_mode:
 					if self.teacher_annealing:
 						# interpolation=1

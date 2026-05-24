@@ -131,7 +131,7 @@ class Model(torch.nn.Module):
             # load_big_file is a workaround by https://github.com/highway11git to load models on some Mac/Windows setups
             # see https://github.com/zalandoresearch/flair/issues/351
             f = flair.file_utils.load_big_file(str(model_file))
-            state = torch.load(f, map_location=device)
+            state = torch.load(f, map_location=device, weights_only=False)
 
         model = cls._init_model_with_state_dict(state, testing = device=='cpu')
 
@@ -147,7 +147,7 @@ class Model(torch.nn.Module):
             # load_big_file is a workaround by https://github.com/highway11git to load models on some Mac/Windows setups
             # see https://github.com/zalandoresearch/flair/issues/351
             f = flair.file_utils.load_big_file(str(checkpoint_file))
-            state = torch.load(f, map_location=flair.device)
+            state = torch.load(f, map_location=flair.device, weights_only=False)
 
         model = cls._init_model_with_state_dict(state)
 

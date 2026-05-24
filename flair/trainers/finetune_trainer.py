@@ -531,7 +531,7 @@ class ModelFinetuner(ModelDistiller):
 			if (not param_selection_mode and self.corpus.test and monitor_test)
 			else False
 		)
-		log_dev = True if not train_with_dev else False
+		log_dev = True  # Always evaluate on dev set after each epoch
 
 		# prepare loss logging file and set up header
 		loss_txt = init_output_file(base_path, "loss.tsv")
@@ -1180,7 +1180,7 @@ class ModelFinetuner(ModelDistiller):
 				if not fine_tune_mode and self.model.tag_type not in dependency_tasks:
 					scheduler.step(current_score)
 				
-				if current_score>best_score:
+				if current_score>=best_score:
 					best_score=current_score
 					bad_epochs2=0
 				else:
@@ -1229,10 +1229,9 @@ class ModelFinetuner(ModelDistiller):
 						train_loss,
 					)
 
-				# if we use dev data, remember best model based on dev evaluation score
+				# save best model based on dev evaluation score
 				if (
-					not train_with_dev
-					and not param_selection_mode
+					not param_selection_mode
 					and current_score == best_score
 				):
 					log.info(f"==================Saving the current best model: {current_score}==================") 

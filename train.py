@@ -54,6 +54,7 @@ parser.add_argument('--test_speed', action='store_true', help='test the running 
 parser.add_argument('--predict_posterior', action='store_true', help='predict the posterior distribution of CRF model')
 parser.add_argument('--batch_size', default=-1, help='manually setting the mini batch size for testing')
 parser.add_argument('--keep_embedding', default=-1, help='mask out all embeddings except the index, for analysis')
+parser.add_argument('--transformer_model', default=None, help='override the transformer model path (local directory or HuggingFace name) for all TransformerWordEmbeddings in config')
 
 def count_parameters(model):
 	import numpy as np
@@ -77,6 +78,14 @@ if args.test and args.zeroshot:
 		enablePrint()
 		print()
 		exit()
+
+# Override transformer model path from CLI (e.g. local SikuBERT directory)
+if args.transformer_model is not None:
+	if 'embeddings' in config:
+		for emb_key in config['embeddings']:
+			if 'TransformerWordEmbeddings' in emb_key and isinstance(config['embeddings'][emb_key], dict):
+				config['embeddings'][emb_key]['model'] = args.transformer_model
+				log.info(f"[CLI override] Embedding '{emb_key}' model set to: {args.transformer_model}")
 
 config = ConfigParser(config,all=args.all,zero_shot=args.zeroshot,other_shot=args.other,predict=args.predict)
 

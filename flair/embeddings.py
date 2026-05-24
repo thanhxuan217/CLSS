@@ -2959,13 +2959,10 @@ class TransformerWordEmbeddings(TokenEmbeddings):
 
         self.special_tokens = []
         # check if special tokens exist to circumvent error message
-        try:
-            if self.tokenizer._bos_token:
-                self.special_tokens.append(self.tokenizer.bos_token)
-            if self.tokenizer._cls_token:
-                self.special_tokens.append(self.tokenizer.cls_token)
-        except:
-            pass
+        if self.tokenizer.bos_token:
+            self.special_tokens.append(self.tokenizer.bos_token)
+        if self.tokenizer.cls_token:
+            self.special_tokens.append(self.tokenizer.cls_token)
         self.document_extraction = document_extraction
         self.v2_doc = v2_doc
         self.ext_doc = ext_doc
@@ -3081,27 +3078,15 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 sent_tokens = copy.deepcopy(sentence.tokens)
                 for token_id, token in enumerate(sent_tokens):
                     if token.text == '<EOS>':
-                        if self.tokenizer._eos_token is not None:
-                            if hasattr(self.tokenizer._eos_token, 'content'):
-                                token.text = self.tokenizer._eos_token.content
-                            else:
-                                token.text = self.tokenizer._eos_token
-                        elif self.tokenizer._sep_token is not None:
-                            if hasattr(self.tokenizer._sep_token, 'content'):
-                                token.text = self.tokenizer._sep_token.content
-                            else:
-                                token.text = self.tokenizer._sep_token
+                        if self.tokenizer.eos_token is not None:
+                            token.text = self.tokenizer.eos_token
+                        elif self.tokenizer.sep_token is not None:
+                            token.text = self.tokenizer.sep_token
 
-                if self.tokenizer._eos_token is not None:
-                    if hasattr(self.tokenizer._eos_token, 'content'):
-                        tokenized_string = re.sub('<EOS>', self.tokenizer._eos_token.content, tokenized_string)
-                    else:
-                        tokenized_string = re.sub('<EOS>', self.tokenizer._eos_token, tokenized_string)
-                elif self.tokenizer._sep_token is not None:
-                    if hasattr(self.tokenizer._sep_token, 'content'):
-                        tokenized_string = re.sub('<EOS>', self.tokenizer._sep_token.content, tokenized_string)
-                    else:
-                        tokenized_string = re.sub('<EOS>', self.tokenizer._sep_token, tokenized_string)
+                if self.tokenizer.eos_token is not None:
+                    tokenized_string = re.sub('<EOS>', self.tokenizer.eos_token, tokenized_string)
+                elif self.tokenizer.sep_token is not None:
+                    tokenized_string = re.sub('<EOS>', self.tokenizer.sep_token, tokenized_string)
                 else:
                     pass
             else:
@@ -3423,15 +3408,15 @@ class TransformerWordEmbeddings(TokenEmbeddings):
             if '<EOS>' in tokenized_string: # replace manually set <EOS> token to the EOS token of the tokenizer
                 for token_id, token in enumerate(sent_tokens):
                     if token.text == '<EOS>':
-                        if self.tokenizer._eos_token is not None:
-                            token.text = self.tokenizer._eos_token
-                        elif self.tokenizer._sep_token is not None:
-                            token.text = self.tokenizer._sep_token
+                        if self.tokenizer.eos_token is not None:
+                            token.text = self.tokenizer.eos_token
+                        elif self.tokenizer.sep_token is not None:
+                            token.text = self.tokenizer.sep_token
 
-                if self.tokenizer._eos_token is not None:
-                    tokenized_string = re.sub('<EOS>', self.tokenizer._eos_token, tokenized_string)
-                elif self.tokenizer._sep_token is not None:
-                    tokenized_string = re.sub('<EOS>', self.tokenizer._sep_token, tokenized_string)
+                if self.tokenizer.eos_token is not None:
+                    tokenized_string = re.sub('<EOS>', self.tokenizer.eos_token, tokenized_string)
+                elif self.tokenizer.sep_token is not None:
+                    tokenized_string = re.sub('<EOS>', self.tokenizer.sep_token, tokenized_string)
                 else:
                     pass
             # method 1: subtokenize sentence

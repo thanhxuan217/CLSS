@@ -552,7 +552,6 @@ class ReinforcementTrainer(ModelDistiller):
 							factor=anneal_factor,
 							patience=patience,
 							mode=anneal_mode,
-							verbose=True,
 						)
 				else:
 					### Finetune Scheduler

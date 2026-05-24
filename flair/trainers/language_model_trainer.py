@@ -293,11 +293,11 @@ class LanguageModelTrainer:
 
             if isinstance(optimizer, (AdamW, SGDW)):
                 scheduler: ReduceLRWDOnPlateau = ReduceLRWDOnPlateau(
-                    optimizer, verbose=True, factor=anneal_factor, patience=patience
+                    optimizer, factor=anneal_factor, patience=patience
                 )
             else:
                 scheduler: ReduceLROnPlateau = ReduceLROnPlateau(
-                    optimizer, verbose=True, factor=anneal_factor, patience=patience
+                    optimizer, factor=anneal_factor, patience=patience
                 )
 
             if use_amp:

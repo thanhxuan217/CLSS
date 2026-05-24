@@ -210,7 +210,6 @@ class ModelTrainer:
             factor=anneal_factor,
             patience=patience,
             mode=anneal_mode,
-            verbose=True,
         )
 
         if self.scheduler_state is not None:

@@ -2405,6 +2405,17 @@ class FastSequenceTagger(SequenceTagger):
 		tag_list: List = []
 		try:
 			tag_list=torch.stack([getattr(sentence,self.tag_type+'_tags').to(flair.device) for sentence in sentences],0).long()
+			# Handle dimension mismatch: pre-assigned tags may be padded to a
+			# different batch's max_len (e.g. when evaluating per-subcorpus with
+			# a freshly created ColumnDataLoader).
+			mask_len = mask.shape[1]
+			tag_len = tag_list.shape[1]
+			if tag_len != mask_len:
+				if tag_len > mask_len:
+					tag_list = tag_list[:, :mask_len]
+				else:
+					pad = torch.zeros(tag_list.shape[0], mask_len - tag_len, device=tag_list.device, dtype=tag_list.dtype)
+					tag_list = torch.cat([tag_list, pad], dim=1)
 		except:
 			tag_list: List = []
 			for s_id, sentence in enumerate(sentences):

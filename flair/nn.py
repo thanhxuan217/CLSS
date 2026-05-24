@@ -57,6 +57,29 @@ class Model(torch.nn.Module):
     def _fetch_model(model_name) -> str:
         return model_name
 
+    def _remove_unpicklable_hooks(self):
+        """Remove forward hooks that contain unpicklable local closures (e.g. Kaggle's output_capturing_hook).
+        Returns a dict mapping (module, hook_id) -> hook so they can be restored later."""
+        saved_hooks = {}
+        for name, module in self.named_modules():
+            if hasattr(module, '_forward_hooks'):
+                hook_ids_to_remove = []
+                for hook_id, hook in module._forward_hooks.items():
+                    # Check if the hook is a local function (closure) which can't be pickled
+                    if hasattr(hook, '__qualname__') and '<locals>' in hook.__qualname__:
+                        saved_hooks[(name, hook_id)] = hook
+                        hook_ids_to_remove.append(hook_id)
+                for hook_id in hook_ids_to_remove:
+                    del module._forward_hooks[hook_id]
+        return saved_hooks
+
+    def _restore_hooks(self, saved_hooks):
+        """Restore previously removed hooks."""
+        module_dict = dict(self.named_modules())
+        for (name, hook_id), hook in saved_hooks.items():
+            if name in module_dict:
+                module_dict[name]._forward_hooks[hook_id] = hook
+
     def save(self, model_file: Union[str, Path]):
         """
         Saves the current model to the provided file.
@@ -64,7 +87,12 @@ class Model(torch.nn.Module):
         """
         model_state = self._get_state_dict()
 
-        torch.save(model_state, str(model_file), pickle_protocol=4)
+        # Remove unpicklable hooks (e.g. Kaggle's output_capturing_hook) before saving
+        saved_hooks = self._remove_unpicklable_hooks()
+        try:
+            torch.save(model_state, str(model_file), pickle_protocol=4)
+        finally:
+            self._restore_hooks(saved_hooks)
 
     def save_checkpoint(
         self,
@@ -82,7 +110,12 @@ class Model(torch.nn.Module):
         model_state["epoch"] = epoch
         model_state["loss"] = loss
 
-        torch.save(model_state, str(model_file), pickle_protocol=4)
+        # Remove unpicklable hooks before saving
+        saved_hooks = self._remove_unpicklable_hooks()
+        try:
+            torch.save(model_state, str(model_file), pickle_protocol=4)
+        finally:
+            self._restore_hooks(saved_hooks)
 
     @classmethod
     def load(cls, model: Union[str, Path], device = flair.device):

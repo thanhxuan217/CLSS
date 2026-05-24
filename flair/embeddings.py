@@ -3244,8 +3244,9 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 for token_idx, (token, number_of_subtokens) in enumerate(zip(sentence, subtoken_lengths)):
 
                     # some tokens have no subtokens at all (if omitted by BERT tokenizer) so return zero vector
-                    if number_of_subtokens == 0:
+                    if number_of_subtokens == 0 or subword_start_idx >= sentence_hidden_state.shape[1]:
                         token.set_embedding(self.name, torch.zeros(self.embedding_length))
+                        subword_start_idx += number_of_subtokens
                         continue
 
                     subword_end_idx = subword_start_idx + number_of_subtokens
@@ -3562,8 +3563,9 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 for token_idx, (token, number_of_subtokens) in enumerate(zip(sentence, subtoken_lengths)):
 
                     # some tokens have no subtokens at all (if omitted by BERT tokenizer) so return zero vector
-                    if number_of_subtokens == 0:
+                    if number_of_subtokens == 0 or subword_start_idx >= sentence_hidden_state.shape[0]:
                         token.set_embedding(self.name, torch.zeros(self.embedding_length))
+                        subword_start_idx += number_of_subtokens
                         continue
 
                     subword_end_idx = subword_start_idx + number_of_subtokens
@@ -3779,8 +3781,9 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 for token_idx, (token, number_of_subtokens) in enumerate(zip(sentence, subtoken_lengths)):
 
                     # some tokens have no subtokens at all (if omitted by BERT tokenizer) so return zero vector
-                    if number_of_subtokens == 0:
+                    if number_of_subtokens == 0 or subword_start_idx >= sentence_hidden_state.shape[0]:
                         token.set_embedding(self.name, torch.zeros(self.embedding_length))
+                        subword_start_idx += number_of_subtokens
                         continue
 
                     subword_end_idx = subword_start_idx + number_of_subtokens

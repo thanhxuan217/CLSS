@@ -2783,7 +2783,12 @@ class BertEmbeddings(TokenEmbeddings):
 
 
         with gradient_context:
-            sequence_output, pooled_output, all_encoder_layers = self.model(all_input_ids, token_type_ids=None, attention_mask=all_input_masks)
+            model_output = self.model(all_input_ids, token_type_ids=None, attention_mask=all_input_masks)
+            if hasattr(model_output, 'hidden_states'):
+                all_encoder_layers = model_output.hidden_states
+                pooled_output = model_output.pooler_output
+            else:
+                sequence_output, pooled_output, all_encoder_layers = model_output
             # gradients are enable if fine-tuning is enabled
             if not hasattr(self,'sentence_feat'):
                 self.sentence_feat=False
@@ -3195,11 +3200,17 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         inputs_embeds = None
         
         if 'xlnet' in self.name:
-            hidden_states = self.model(input_ids, attention_mask=mask, inputs_embeds = inputs_embeds)[-1]
+            xlnet_output = self.model(input_ids, attention_mask=mask, inputs_embeds = inputs_embeds)
+            hidden_states = xlnet_output.hidden_states if hasattr(xlnet_output, 'hidden_states') else xlnet_output[-1]
             if self.sentence_feat:
                 assert 0, 'not implemented'
         else:
-            sequence_output, pooled_output, hidden_states = self.model(input_ids, attention_mask=mask, inputs_embeds = inputs_embeds)
+            model_output = self.model(input_ids, attention_mask=mask, inputs_embeds = inputs_embeds)
+            if hasattr(model_output, 'hidden_states'):
+                hidden_states = model_output.hidden_states
+                pooled_output = model_output.pooler_output
+            else:
+                sequence_output, pooled_output, hidden_states = model_output
             if self.sentence_feat:
                 self.pooled_output = pooled_output
             # hidden_states = self.model(input_ids, attention_mask=mask)[-1]
@@ -3519,7 +3530,9 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 doc_input_masks.append(batch_mask)
             doc_hidden_states = torch.zeros([len(doc_subtokens),self.embedding_length])
             for i in range(len(doc_input_ids)):
-                hidden_states=torch.stack(self.model(doc_input_ids[i], attention_mask=doc_input_masks[i])[-1])[self.layer_indexes]
+                _model_out = self.model(doc_input_ids[i], attention_mask=doc_input_masks[i])
+                _hs = _model_out.hidden_states if hasattr(_model_out, 'hidden_states') else _model_out[-1]
+                hidden_states=torch.stack(_hs)[self.layer_indexes]
                 hidden_states = hidden_states.permute([1,2,3,0])
                 # reshape to batch x subtokens x hidden_size*layers
                 # hidden_states = hidden_states.reshape(hidden_states.shape[0],hidden_states.shape[1],-1)
@@ -3746,7 +3759,9 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         gradient_context = torch.enable_grad() if (self.fine_tune and self.training) else torch.no_grad()
         # sublens=[sum(x) for x in doc_token_subtoken_lengths]
         with gradient_context:
-            hidden_states=torch.stack(self.model(doc_input_ids, attention_mask=doc_input_masks)[-1])[self.layer_indexes]
+            _model_out = self.model(doc_input_ids, attention_mask=doc_input_masks)
+            _hs = _model_out.hidden_states if hasattr(_model_out, 'hidden_states') else _model_out[-1]
+            hidden_states=torch.stack(_hs)[self.layer_indexes]
             hidden_states = hidden_states.permute([1,2,3,0])
             hidden_states = [hidden_states[:,:,:,x] for x in range(len(self.layer_indexes))]
             hidden_states = torch.cat(hidden_states,-1)

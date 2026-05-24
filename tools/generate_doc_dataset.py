@@ -55,13 +55,12 @@ logger = logging.getLogger(__name__)
 Sentence = list[tuple[str, str]]
 
 
-def read_conll(file_path: Path, text_col: int = 0, tag_col: int = 1) -> list[Sentence]:
+def iter_conll(file_path: Path, text_col: int = 0, tag_col: int = 1):
     """
-    Đọc file CoNLL column format.
+    Đọc file CoNLL column format theo kiểu streaming.
     Mỗi sentence phân cách bằng dòng trống.
     Dòng bắt đầu bằng -DOCSTART- được bỏ qua.
     """
-    sentences: list[Sentence] = []
     current: Sentence = []
 
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -73,7 +72,7 @@ def read_conll(file_path: Path, text_col: int = 0, tag_col: int = 1) -> list[Sen
 
             if line.strip() == "":
                 if current:
-                    sentences.append(current)
+                    yield current
                     current = []
                 continue
 
@@ -86,20 +85,18 @@ def read_conll(file_path: Path, text_col: int = 0, tag_col: int = 1) -> list[Sen
             current.append((token, tag))
 
     if current:
-        sentences.append(current)
-
-    return sentences
+        yield current
 
 
-def write_conll_doc(
-    sentences: list[Sentence],
-    retrieved_groups: list[list[str]],
-    out_file: Path,
+def write_conll_doc_single(
+    f,
+    sent: Sentence,
+    retrieved_sents: list[str],
     eos_tag: str = "S-X",
     retrieved_tag: str = "S-X",
 ) -> None:
     """
-    Ghi dataset *_doc theo format CLSS:
+    Ghi 1 câu dataset *_doc theo format CLSS vào file handle f:
       -DOCSTART- O
       (blank)
       <original tokens with tags>
@@ -107,26 +104,22 @@ def write_conll_doc(
       <retrieved tokens with S-X tag>
       (blank)
     """
-    out_file.parent.mkdir(parents=True, exist_ok=True)
+    f.write("-DOCSTART- O\n\n")
 
-    with open(out_file, "w", encoding="utf-8") as f:
-        for sent, retrieved_sents in zip(sentences, retrieved_groups):
-            f.write("-DOCSTART- O\n\n")
+    # Câu gốc
+    for token, tag in sent:
+        f.write(f"{token}\t{tag}\n")
 
-            # Câu gốc
-            for token, tag in sent:
-                f.write(f"{token}\t{tag}\n")
+    if retrieved_sents:
+        # EOS separator
+        f.write(f"<EOS>\t{eos_tag}\n")
 
-            if retrieved_sents:
-                # EOS separator
-                f.write(f"<EOS>\t{eos_tag}\n")
+        # Các câu retrieved
+        for ret_sent in retrieved_sents:
+            for char_token in ret_sent.replace(" ", ""):
+                f.write(f"{char_token}\t{retrieved_tag}\n")
 
-                # Các câu retrieved
-                for ret_sent in retrieved_sents:
-                    for char_token in ret_sent.replace(" ", ""):
-                        f.write(f"{char_token}\t{retrieved_tag}\n")
-
-            f.write("\n")
+    f.write("\n")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -231,39 +224,39 @@ def process_split(
     tag_col: int,
 ) -> None:
     logger.info("Xử lý: %s → %s", input_file.name, output_file.name)
-    sentences = read_conll(input_file, text_col, tag_col)
-    logger.info("  Số câu: %d", len(sentences))
+    
+    output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    retrieved_groups: list[list[str]] = []
     total_retrieved = 0
     no_result = 0
+    i = 0
 
-    for i, sent in enumerate(sentences):
-        q_text = sentence_text(sent)
-        retrieved = retrieve_for_sentence(
-            q_text, lsh,
-            num_perm, ngram_size, top_k, min_jaccard, max_jaccard,
-        )
-        retrieved_groups.append(retrieved)
-        total_retrieved += len(retrieved)
-        if not retrieved:
-            no_result += 1
-
-        if (i + 1) % 500 == 0:
-            logger.info(
-                "  … %d / %d câu (avg retrieved: %.1f)",
-                i + 1,
-                len(sentences),
-                total_retrieved / (i + 1),
+    with open(output_file, "w", encoding="utf-8") as f_out:
+        for sent in iter_conll(input_file, text_col, tag_col):
+            q_text = sentence_text(sent)
+            retrieved = retrieve_for_sentence(
+                q_text, lsh,
+                num_perm, ngram_size, top_k, min_jaccard, max_jaccard,
             )
+            total_retrieved += len(retrieved)
+            if not retrieved:
+                no_result += 1
 
-    avg = total_retrieved / max(len(sentences), 1)
+            write_conll_doc_single(f_out, sent, retrieved)
+            
+            i += 1
+            if i % 500 == 0:
+                logger.info(
+                    "  … %d câu đã xử lý (avg retrieved: %.1f)",
+                    i,
+                    total_retrieved / i,
+                )
+
+    avg = total_retrieved / max(i, 1)
     logger.info(
-        "  Xong: avg retrieved=%.2f/câu | %d câu không có retrieved",
-        avg, no_result,
+        "  Xong: %d câu | avg retrieved=%.2f/câu | %d câu không có retrieved",
+        i, avg, no_result,
     )
-
-    write_conll_doc(sentences, retrieved_groups, output_file)
     logger.info("  Đã lưu: %s", output_file)
 
 

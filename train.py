@@ -55,6 +55,7 @@ parser.add_argument('--predict_posterior', action='store_true', help='predict th
 parser.add_argument('--batch_size', default=-1, help='manually setting the mini batch size for testing')
 parser.add_argument('--keep_embedding', default=-1, help='mask out all embeddings except the index, for analysis')
 parser.add_argument('--transformer_model', default=None, help='override the transformer model path (local directory or HuggingFace name) for all TransformerWordEmbeddings in config')
+parser.add_argument('--out_dir', default=None, help='output directory: lưu kết quả training (checkpoints, log) hoặc load model khi --test')
 
 def count_parameters(model):
 	import numpy as np
@@ -86,6 +87,7 @@ if args.transformer_model is not None:
 			if 'TransformerWordEmbeddings' in emb_key and isinstance(config['embeddings'][emb_key], dict):
 				config['embeddings'][emb_key]['model'] = args.transformer_model
 				log.info(f"[CLI override] Embedding '{emb_key}' model set to: {args.transformer_model}")
+
 
 config = ConfigParser(config,all=args.all,zero_shot=args.zeroshot,other_shot=args.other,predict=args.predict)
 
@@ -129,7 +131,13 @@ else:
 
 
 train_config=config.config['train']
-train_config['base_path']=config.get_target_path
+# Override output directory from CLI if provided
+if args.out_dir is not None:
+	train_config['base_path'] = Path(args.out_dir)
+	os.makedirs(args.out_dir, exist_ok=True)
+	log.info(f"[CLI override] Output directory set to: {args.out_dir}")
+else:
+	train_config['base_path']=config.get_target_path
 
 # train_config['shuffle']=False
 eval_mini_batch_size = int(config.config['train']['mini_batch_size'])
@@ -154,8 +162,14 @@ if args.test_speed:
 elif args.test:
 	student.eval()
 	trainer.embeddings_storage_mode = 'cpu'
+	# Xác định thư mục chứa model và lưu kết quả test
+	# --out_dir: dùng thư mục đã chỉ định (nơi model được lưu lúc train)
+	# Mặc định: dùng target_dir/model_name từ config YAML
+	test_out_path = Path(args.out_dir) if args.out_dir is not None else config.get_target_path
+	os.makedirs(test_out_path, exist_ok=True)
+	log.info(f"[Test] Model & output directory: {test_out_path}")
 	trainer.final_test(
-		config.get_target_path,
+		test_out_path,
 		eval_mini_batch_size=eval_mini_batch_size,
 		overall_test=True if int(args.keep_embedding)<0 else False,
 		quiet_mode=args.quiet,

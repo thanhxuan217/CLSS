@@ -3,13 +3,13 @@
 """
 generate_doc_dataset_parallel.py
 ────────────────────────────────
-Phiên bản SONG SONG của generate_doc_dataset.py.
+Phiên bản SONG SONG + STREAMING của generate_doc_dataset.py.
 
 Tối ưu:
-  1. multiprocessing.Pool — mỗi worker mở SQLite connection riêng (read-only)
-  2. Batch chunk processing — giảm overhead IPC
-  3. Resume support — nếu bị interrupt, chạy lại sẽ tiếp tục từ câu đã xử lý
-  4. Tăng SQLite cache cho mỗi worker
+  1. STREAMING — không load toàn bộ file vào RAM (fix OOM trên Kaggle 13GB)
+  2. multiprocessing.Pool — mỗi worker mở SQLite connection riêng (read-only)
+  3. Batch chunk processing — giảm overhead IPC
+  4. Resume support — nếu bị interrupt, chạy lại sẽ tiếp tục từ câu đã xử lý
 
 Usage:
   python tools/generate_doc_dataset_parallel.py \
@@ -24,14 +24,10 @@ Usage:
 """
 
 import argparse
-import gc
 import logging
-import os
-import tempfile
-import shutil
-from multiprocessing import Pool, cpu_count, current_process
+import time
+from multiprocessing import Pool, cpu_count
 from pathlib import Path
-from functools import partial
 
 try:
     from datasketch import MinHash
@@ -49,15 +45,14 @@ logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# CoNLL I/O
+# CoNLL I/O — STREAMING (không load toàn bộ vào RAM)
 # ──────────────────────────────────────────────────────────────────────────────
 
 Sentence = list[tuple[str, str]]
 
 
-def read_all_conll(file_path: Path, text_col: int = 0, tag_col: int = 1) -> list[Sentence]:
-    """Đọc TOÀN BỘ file CoNLL vào memory (cần cho parallel processing)."""
-    sentences: list[Sentence] = []
+def iter_conll(file_path: Path, text_col: int = 0, tag_col: int = 1):
+    """Đọc file CoNLL streaming, yield từng sentence."""
     current: Sentence = []
 
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -69,7 +64,7 @@ def read_all_conll(file_path: Path, text_col: int = 0, tag_col: int = 1) -> list
 
             if line.strip() == "":
                 if current:
-                    sentences.append(current)
+                    yield current
                     current = []
                 continue
 
@@ -82,9 +77,47 @@ def read_all_conll(file_path: Path, text_col: int = 0, tag_col: int = 1) -> list
             current.append((token, tag))
 
     if current:
-        sentences.append(current)
+        yield current
 
-    return sentences
+
+def iter_conll_chunks(
+    file_path: Path,
+    text_col: int,
+    tag_col: int,
+    chunk_size: int,
+    skip: int = 0,
+):
+    """
+    Stream file CoNLL theo chunks.
+    Skip `skip` câu đầu (cho resume), rồi yield từng chunk.
+    Mỗi chunk = list[Sentence], tối đa chunk_size câu.
+    RAM chỉ giữ 1 chunk tại mỗi thời điểm.
+    """
+    chunk: list[Sentence] = []
+    count = 0
+
+    for sent in iter_conll(file_path, text_col, tag_col):
+        if count < skip:
+            count += 1
+            continue
+
+        chunk.append(sent)
+        count += 1
+
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = []
+
+    if chunk:
+        yield chunk
+
+
+def count_sentences_in_file(file_path: Path, text_col: int = 0, tag_col: int = 1) -> int:
+    """Đếm nhanh số câu trong file CoNLL (streaming, không giữ data)."""
+    count = 0
+    for _ in iter_conll(file_path, text_col, tag_col):
+        count += 1
+    return count
 
 
 def write_conll_doc_single(
@@ -132,17 +165,19 @@ def sentence_text(sent: Sentence) -> str:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Worker init / process
+# Worker init / process — mỗi worker mở SQLite connection riêng
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Global per-worker state
+# Global per-worker state (set by _worker_init)
 _worker_lsh = None
 _worker_params = None
 
 
-def _worker_init(db_path: str, num_perm: int, ngram_size: int,
-                 top_k: int, min_jaccard: float, max_jaccard: float,
-                 cache_size_mb: int):
+def _worker_init(
+    db_path: str, num_perm: int, ngram_size: int,
+    top_k: int, min_jaccard: float, max_jaccard: float,
+    cache_size_mb: int,
+):
     """Khởi tạo SQLite connection cho mỗi worker process."""
     global _worker_lsh, _worker_params
     _worker_lsh = SqliteMinHashLSH.open(db_path, cache_size_mb=cache_size_mb)
@@ -155,11 +190,11 @@ def _worker_init(db_path: str, num_perm: int, ngram_size: int,
     }
 
 
-def _retrieve_for_sentence_worker(query_text: str) -> list[str]:
+def _retrieve_single(query_text: str) -> list[str]:
     """Query LSH cho 1 câu — chạy trong worker process."""
     global _worker_lsh, _worker_params
-
     p = _worker_params
+
     shingles_q = make_shingles(query_text, p["ngram_size"])
     mh_q = make_minhash(shingles_q, p["num_perm"])
 
@@ -198,21 +233,36 @@ def _retrieve_for_sentence_worker(query_text: str) -> list[str]:
     return result
 
 
-def _process_chunk(chunk: list[tuple[int, str]]) -> list[tuple[int, list[str]]]:
+def _process_chunk(chunk: list[Sentence]) -> list[tuple[Sentence, list[str]]]:
     """
-    Xử lý 1 chunk gồm các (global_idx, query_text).
-    Trả về list of (global_idx, retrieved_texts).
+    Worker xử lý 1 chunk câu.
+    Input:  list[Sentence]  (sentence = list of (token, tag))
+    Output: list[(Sentence, retrieved_texts)]
     """
     results = []
-    for idx, q_text in chunk:
-        retrieved = _retrieve_for_sentence_worker(q_text)
-        results.append((idx, retrieved))
+    for sent in chunk:
+        q_text = sentence_text(sent)
+        retrieved = _retrieve_single(q_text)
+        results.append((sent, retrieved))
     return results
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Main pipeline
 # ──────────────────────────────────────────────────────────────────────────────
+
+def count_docstart(file_path: Path) -> int:
+    """Đếm nhanh số -DOCSTART- trong output file (cho resume)."""
+    count = 0
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if line.startswith("-DOCSTART-"):
+                    count += 1
+    except FileNotFoundError:
+        pass
+    return count
+
 
 def process_split_parallel(
     input_file: Path,
@@ -234,133 +284,120 @@ def process_split_parallel(
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # ── Đọc toàn bộ câu vào memory ──
-    logger.info("  Đang đọc file input...")
-    all_sentences = read_all_conll(input_file, text_col, tag_col)
-    total = len(all_sentences)
+    # ── Đếm tổng câu (streaming, không giữ data) ──
+    logger.info("  Đang đếm câu trong file input (streaming)...")
+    total = count_sentences_in_file(input_file, text_col, tag_col)
     logger.info("  Tổng: %d câu", total)
 
-    # ── Resume support: kiểm tra file output đã có bao nhiêu câu ──
-    resume_from = 0
-    if output_file.exists():
-        # Đếm số -DOCSTART- đã ghi = số câu đã xử lý
-        with open(output_file, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                if line.startswith("-DOCSTART-"):
-                    resume_from += 1
-        if resume_from > 0:
-            logger.info("  ⚡ Resume: bỏ qua %d câu đã xử lý, tiếp tục từ câu %d",
-                        resume_from, resume_from)
+    # ── Resume: kiểm tra output đã có bao nhiêu câu ──
+    resume_from = count_docstart(output_file)
+    if resume_from > 0:
+        logger.info("  ⚡ Resume: bỏ qua %d câu đã xử lý, tiếp tục từ câu %d",
+                    resume_from, resume_from)
 
     if resume_from >= total:
         logger.info("  File đã hoàn thành, bỏ qua.")
         return
 
-    # ── Chuẩn bị chunks cho parallel processing ──
-    query_items: list[tuple[int, str]] = []
-    for idx in range(resume_from, total):
-        q_text = sentence_text(all_sentences[idx])
-        query_items.append((idx, q_text))
+    remaining = total - resume_from
+    logger.info("  Cần xử lý: %d câu còn lại", remaining)
 
-    # Chia thành chunks
-    chunks: list[list[tuple[int, str]]] = []
-    for i in range(0, len(query_items), chunk_size):
-        chunks.append(query_items[i : i + chunk_size])
-
-    logger.info("  Cần xử lý: %d câu, chia thành %d chunks", len(query_items), len(chunks))
-
-    # ── Xử lý song song ──
-    # Mở file ở mode append (cho resume)
+    # ── File mode ──
     open_mode = "a" if resume_from > 0 else "w"
 
     total_retrieved = 0
     no_result = 0
     processed = resume_from
+    t0 = time.time()
 
+    # ── Stream chunks → worker pool → write output ──
     with Pool(
         processes=num_workers,
         initializer=_worker_init,
-        initargs=(db_path, num_perm, ngram_size, top_k, min_jaccard, max_jaccard, cache_size_mb),
+        initargs=(db_path, num_perm, ngram_size, top_k,
+                  min_jaccard, max_jaccard, cache_size_mb),
     ) as pool:
-        with open(output_file, open_mode, encoding="utf-8") as f_out:
-            # imap_unordered cho throughput tốt hơn, nhưng ta cần giữ thứ tự
-            # → dùng imap (ordered) để đảm bảo output đúng thứ tự
-            for chunk_results in pool.imap(_process_chunk, chunks):
-                # chunk_results: list of (global_idx, retrieved_texts)
-                for global_idx, retrieved in chunk_results:
-                    sent = all_sentences[global_idx]
-                    write_conll_doc_single(f_out, sent, retrieved)
+        # Generator: stream chunks từ file, skip resume_from câu đầu
+        chunk_gen = iter_conll_chunks(
+            input_file, text_col, tag_col, chunk_size, skip=resume_from,
+        )
 
+        with open(output_file, open_mode, encoding="utf-8") as f_out:
+            # pool.imap giữ thứ tự, lazy consume generator
+            # → chỉ vài chunk trong RAM tại mỗi thời điểm
+            for chunk_results in pool.imap(_process_chunk, chunk_gen):
+                for sent, retrieved in chunk_results:
+                    write_conll_doc_single(f_out, sent, retrieved)
                     total_retrieved += len(retrieved)
                     if not retrieved:
                         no_result += 1
                     processed += 1
 
-                # Flush sau mỗi chunk
+                # Flush sau mỗi chunk để resume chính xác
                 f_out.flush()
 
+                # Log progress
                 if processed % 5000 < chunk_size:
+                    elapsed = time.time() - t0
+                    speed = (processed - resume_from) / max(elapsed, 0.1)
+                    eta_sec = (total - processed) / max(speed, 0.01)
+                    eta_min = eta_sec / 60
                     avg = total_retrieved / max(processed - resume_from, 1)
                     logger.info(
-                        "  … %d/%d câu đã xử lý (%.1f%%) | avg retrieved: %.1f",
-                        processed, total, 100.0 * processed / total, avg,
+                        "  … %d/%d (%.1f%%) | %.0f câu/s | ETA %.0f phút | avg ret: %.1f",
+                        processed, total,
+                        100.0 * processed / total,
+                        speed, eta_min, avg,
                     )
 
+    elapsed = time.time() - t0
     avg = total_retrieved / max(processed - resume_from, 1)
     logger.info(
-        "  Xong: %d câu | avg retrieved=%.2f/câu | %d câu không có retrieved",
-        processed, avg, no_result,
+        "  Xong: %d câu trong %.0f giây (%.0f câu/s) | avg ret=%.2f | %d ko ret",
+        processed, elapsed, (processed - resume_from) / max(elapsed, 0.1),
+        avg, no_result,
     )
     logger.info("  Đã lưu: %s", output_file)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Sinh dataset *_doc dùng MinHash LSH retrieval — PARALLEL version"
+        description="Sinh dataset *_doc — PARALLEL + STREAMING (low memory)"
     )
-    parser.add_argument("--input_dir", required=True,
-                        help="Thư mục dataset gốc (CoNLL column format)")
-    parser.add_argument("--output_dir", required=True,
-                        help="Thư mục xuất dataset *_doc")
-    parser.add_argument("--index_db", required=True,
-                        help="SQLite database chứa LSH index (.db)")
+    parser.add_argument("--input_dir", required=True)
+    parser.add_argument("--output_dir", required=True)
+    parser.add_argument("--index_db", required=True)
 
-    parser.add_argument("--top_k", type=int, default=5,
-                        help="Số câu retrieved tối đa. Default: 5")
-    parser.add_argument("--max_jaccard", type=float, default=0.95,
-                        help="Loại câu có Jaccard > ngưỡng này. Default: 0.95")
-    parser.add_argument("--min_jaccard", type=float, default=0.1,
-                        help="Loại câu có Jaccard < ngưỡng này. Default: 0.1")
+    parser.add_argument("--top_k", type=int, default=5)
+    parser.add_argument("--max_jaccard", type=float, default=0.95)
+    parser.add_argument("--min_jaccard", type=float, default=0.1)
     parser.add_argument("--num_perm", type=int, default=0,
-                        help="Override num_perm (0 = dùng từ DB metadata). Default: 0")
-    parser.add_argument("--ngram_size", type=int, default=2,
-                        help="Kích thước character n-gram. Default: 2")
+                        help="0 = đọc từ DB metadata")
+    parser.add_argument("--ngram_size", type=int, default=2)
 
-    parser.add_argument("--text_col", type=int, default=0,
-                        help="Cột text trong CoNLL file (0-indexed). Default: 0")
-    parser.add_argument("--tag_col", type=int, default=1,
-                        help="Cột NER tag trong CoNLL file (0-indexed). Default: 1")
+    parser.add_argument("--text_col", type=int, default=0)
+    parser.add_argument("--tag_col", type=int, default=1)
 
     parser.add_argument("--splits", nargs="+",
-                        default=["train.txt", "dev.txt", "test.txt"],
-                        help="Tên các file split. Default: train.txt dev.txt test.txt")
+                        default=["train.txt", "dev.txt", "test.txt"])
 
-    # ── Parallel-specific args ──
+    # ── Parallel args ──
     parser.add_argument("--num_workers", type=int, default=0,
-                        help="Số worker processes (0 = auto = cpu_count). Default: 0")
+                        help="0 = auto (cpu_count - 1)")
     parser.add_argument("--chunk_size", type=int, default=500,
                         help="Số câu mỗi chunk gửi cho worker. Default: 500")
     parser.add_argument("--cache_size_mb", type=int, default=128,
-                        help="SQLite cache size cho mỗi worker (MB). Default: 128")
+                        help="SQLite cache/worker (MB). Default: 128")
 
     args = parser.parse_args()
 
-    # ── Determine worker count ──
+    # ── Workers ──
     if args.num_workers <= 0:
         args.num_workers = max(1, cpu_count() - 1)
-    logger.info("Parallel workers: %d", args.num_workers)
+    logger.info("Workers: %d | chunk_size: %d | cache: %d MB/worker",
+                args.num_workers, args.chunk_size, args.cache_size_mb)
 
-    # ── Đọc metadata từ DB ──
+    # ── Đọc metadata từ DB (1 connection tạm) ──
     logger.info("Đang đọc metadata từ: %s", args.index_db)
     lsh_tmp = SqliteMinHashLSH.open(args.index_db)
     total_in_index = lsh_tmp.total_sentences()

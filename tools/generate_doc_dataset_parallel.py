@@ -24,7 +24,9 @@ Usage:
 """
 
 import argparse
+import json
 import logging
+import os
 import time
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
@@ -120,26 +122,26 @@ def count_sentences_in_file(file_path: Path, text_col: int = 0, tag_col: int = 1
     return count
 
 
-def write_conll_doc_single(
-    f,
+def _format_conll_doc_single(
     sent: Sentence,
     retrieved_sents: list[str],
     eos_tag: str = "S-X",
     retrieved_tag: str = "S-X",
-) -> None:
-    """Ghi 1 câu dataset *_doc."""
-    f.write("-DOCSTART- O\n\n")
+) -> str:
+    """Format 1 câu dataset *_doc thành string."""
+    parts: list[str] = ["-DOCSTART- O\n\n"]
 
     for token, tag in sent:
-        f.write(f"{token}\t{tag}\n")
+        parts.append(f"{token}\t{tag}\n")
 
     if retrieved_sents:
-        f.write(f"<EOS>\t{eos_tag}\n")
+        parts.append(f"<EOS>\t{eos_tag}\n")
         for ret_sent in retrieved_sents:
             for char_token in ret_sent.replace(" ", ""):
-                f.write(f"{char_token}\t{retrieved_tag}\n")
+                parts.append(f"{char_token}\t{retrieved_tag}\n")
 
-    f.write("\n")
+    parts.append("\n")
+    return "".join(parts)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -248,20 +250,89 @@ def _process_chunk(chunk: list[Sentence]) -> list[tuple[Sentence, list[str]]]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Main pipeline
+# Checkpoint — robust resume khi bị timeout / crash
 # ──────────────────────────────────────────────────────────────────────────────
 
-def count_docstart(file_path: Path) -> int:
-    """Đếm nhanh số -DOCSTART- trong output file (cho resume)."""
-    count = 0
+def _checkpoint_path(output_file: Path) -> Path:
+    """Trả về path checkpoint tương ứng với output file."""
+    return output_file.with_suffix(output_file.suffix + ".checkpoint")
+
+
+def _load_checkpoint(output_file: Path) -> tuple[int, int]:
+    """
+    Load checkpoint. Trả về (processed_count, byte_offset).
+    Nếu không có checkpoint hoặc lỗi → (0, 0).
+    """
+    ckpt = _checkpoint_path(output_file)
+    if not ckpt.exists():
+        return 0, 0
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                if line.startswith("-DOCSTART-"):
-                    count += 1
-    except FileNotFoundError:
-        pass
-    return count
+        with open(ckpt, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        count = int(data["processed"])
+        offset = int(data["byte_offset"])
+        # Validate: output file phải tồn tại và đủ lớn
+        if not output_file.exists():
+            return 0, 0
+        file_size = output_file.stat().st_size
+        if offset > file_size:
+            logger.warning(
+                "  ⚠ Checkpoint byte_offset (%d) > file size (%d). Reset.",
+                offset, file_size,
+            )
+            return 0, 0
+        return count, offset
+    except (json.JSONDecodeError, KeyError, ValueError, OSError) as e:
+        logger.warning("  ⚠ Checkpoint lỗi (%s). Reset.", e)
+        return 0, 0
+
+
+def _save_checkpoint(output_file: Path, processed: int, byte_offset: int) -> None:
+    """Ghi checkpoint ra file (atomic trên hầu hết OS)."""
+    ckpt = _checkpoint_path(output_file)
+    tmp = ckpt.with_suffix(".tmp")
+    data = {"processed": processed, "byte_offset": byte_offset}
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+        f.flush()
+        os.fsync(f.fileno())
+    # Atomic rename (Windows: replace nếu đã tồn tại)
+    try:
+        tmp.replace(ckpt)
+    except OSError:
+        # Fallback cho Windows cũ
+        if ckpt.exists():
+            ckpt.unlink()
+        tmp.rename(ckpt)
+
+
+def _delete_checkpoint(output_file: Path) -> None:
+    """Xoá checkpoint khi đã hoàn thành."""
+    ckpt = _checkpoint_path(output_file)
+    if ckpt.exists():
+        ckpt.unlink()
+
+
+def _truncate_output(output_file: Path, byte_offset: int) -> None:
+    """
+    Truncate output file về đúng byte_offset.
+    Fix trường hợp crash giữa chừng khi đang ghi → dữ liệu dở.
+    """
+    if not output_file.exists():
+        return
+    file_size = output_file.stat().st_size
+    if file_size > byte_offset:
+        logger.info(
+            "  🔧 Truncate output: %d → %d bytes (xoá %d bytes dở)",
+            file_size, byte_offset, file_size - byte_offset,
+        )
+        with open(output_file, "r+b") as f:
+            f.truncate(byte_offset)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Main pipeline
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def process_split_parallel(
@@ -289,21 +360,27 @@ def process_split_parallel(
     total = count_sentences_in_file(input_file, text_col, tag_col)
     logger.info("  Tổng: %d câu", total)
 
-    # ── Resume: kiểm tra output đã có bao nhiêu câu ──
-    resume_from = count_docstart(output_file)
+    # ── Resume: load checkpoint ──
+    resume_from, resume_offset = _load_checkpoint(output_file)
     if resume_from > 0:
-        logger.info("  ⚡ Resume: bỏ qua %d câu đã xử lý, tiếp tục từ câu %d",
-                    resume_from, resume_from)
+        logger.info(
+            "  ⚡ Resume: bỏ qua %d câu đã xử lý (offset=%d bytes), tiếp tục từ câu %d",
+            resume_from, resume_offset, resume_from,
+        )
+        # Truncate output file về đúng checkpoint offset
+        # (xoá dữ liệu dở nếu crash giữa chừng)
+        _truncate_output(output_file, resume_offset)
 
     if resume_from >= total:
         logger.info("  File đã hoàn thành, bỏ qua.")
+        _delete_checkpoint(output_file)
         return
 
     remaining = total - resume_from
     logger.info("  Cần xử lý: %d câu còn lại", remaining)
 
     # ── File mode ──
-    open_mode = "a" if resume_from > 0 else "w"
+    open_mode = "ab" if resume_from > 0 else "wb"
 
     total_retrieved = 0
     no_result = 0
@@ -322,19 +399,23 @@ def process_split_parallel(
             input_file, text_col, tag_col, chunk_size, skip=resume_from,
         )
 
-        with open(output_file, open_mode, encoding="utf-8") as f_out:
+        with open(output_file, open_mode) as f_out:
             # pool.imap giữ thứ tự, lazy consume generator
             # → chỉ vài chunk trong RAM tại mỗi thời điểm
             for chunk_results in pool.imap(_process_chunk, chunk_gen):
                 for sent, retrieved in chunk_results:
-                    write_conll_doc_single(f_out, sent, retrieved)
+                    # Ghi bằng bytes để byte_offset chính xác
+                    line = _format_conll_doc_single(sent, retrieved)
+                    f_out.write(line.encode("utf-8"))
                     total_retrieved += len(retrieved)
                     if not retrieved:
                         no_result += 1
                     processed += 1
 
-                # Flush sau mỗi chunk để resume chính xác
+                # Flush + fsync + save checkpoint sau mỗi chunk
                 f_out.flush()
+                os.fsync(f_out.fileno())
+                _save_checkpoint(output_file, processed, f_out.tell())
 
                 # Log progress
                 if processed % 5000 < chunk_size:
@@ -349,6 +430,9 @@ def process_split_parallel(
                         100.0 * processed / total,
                         speed, eta_min, avg,
                     )
+
+    # ── Hoàn thành → xoá checkpoint ──
+    _delete_checkpoint(output_file)
 
     elapsed = time.time() - t0
     avg = total_retrieved / max(processed - resume_from, 1)

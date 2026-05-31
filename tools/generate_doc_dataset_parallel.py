@@ -253,17 +253,21 @@ def _process_chunk(chunk: list[Sentence]) -> list[tuple[Sentence, list[str]]]:
 # Checkpoint — robust resume khi bị timeout / crash
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _checkpoint_path(output_file: Path) -> Path:
+def _checkpoint_path(output_file: Path, checkpoint_dir: Path | None = None) -> Path:
     """Trả về path checkpoint tương ứng với output file."""
-    return output_file.with_suffix(output_file.suffix + ".checkpoint")
+    name = output_file.name + ".checkpoint"
+    if checkpoint_dir is not None:
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        return checkpoint_dir / name
+    return output_file.parent / name
 
 
-def _load_checkpoint(output_file: Path) -> tuple[int, int]:
+def _load_checkpoint(output_file: Path, checkpoint_dir: Path | None = None) -> tuple[int, int]:
     """
     Load checkpoint. Trả về (processed_count, byte_offset).
     Nếu không có checkpoint hoặc lỗi → (0, 0).
     """
-    ckpt = _checkpoint_path(output_file)
+    ckpt = _checkpoint_path(output_file, checkpoint_dir)
     if not ckpt.exists():
         return 0, 0
     try:
@@ -287,9 +291,10 @@ def _load_checkpoint(output_file: Path) -> tuple[int, int]:
         return 0, 0
 
 
-def _save_checkpoint(output_file: Path, processed: int, byte_offset: int) -> None:
+def _save_checkpoint(output_file: Path, processed: int, byte_offset: int,
+                     checkpoint_dir: Path | None = None) -> None:
     """Ghi checkpoint ra file (atomic trên hầu hết OS)."""
-    ckpt = _checkpoint_path(output_file)
+    ckpt = _checkpoint_path(output_file, checkpoint_dir)
     tmp = ckpt.with_suffix(".tmp")
     data = {"processed": processed, "byte_offset": byte_offset}
     with open(tmp, "w", encoding="utf-8") as f:
@@ -306,9 +311,9 @@ def _save_checkpoint(output_file: Path, processed: int, byte_offset: int) -> Non
         tmp.rename(ckpt)
 
 
-def _delete_checkpoint(output_file: Path) -> None:
+def _delete_checkpoint(output_file: Path, checkpoint_dir: Path | None = None) -> None:
     """Xoá checkpoint khi đã hoàn thành."""
-    ckpt = _checkpoint_path(output_file)
+    ckpt = _checkpoint_path(output_file, checkpoint_dir)
     if ckpt.exists():
         ckpt.unlink()
 
@@ -349,6 +354,7 @@ def process_split_parallel(
     num_workers: int,
     chunk_size: int,
     cache_size_mb: int,
+    checkpoint_dir: Path | None = None,
 ) -> None:
     logger.info("Xử lý: %s → %s (workers=%d, chunk=%d)",
                 input_file.name, output_file.name, num_workers, chunk_size)
@@ -361,7 +367,7 @@ def process_split_parallel(
     logger.info("  Tổng: %d câu", total)
 
     # ── Resume: load checkpoint ──
-    resume_from, resume_offset = _load_checkpoint(output_file)
+    resume_from, resume_offset = _load_checkpoint(output_file, checkpoint_dir)
     if resume_from > 0:
         logger.info(
             "  ⚡ Resume: bỏ qua %d câu đã xử lý (offset=%d bytes), tiếp tục từ câu %d",
@@ -373,7 +379,7 @@ def process_split_parallel(
 
     if resume_from >= total:
         logger.info("  File đã hoàn thành, bỏ qua.")
-        _delete_checkpoint(output_file)
+        _delete_checkpoint(output_file, checkpoint_dir)
         return
 
     remaining = total - resume_from
@@ -415,7 +421,7 @@ def process_split_parallel(
                 # Flush + fsync + save checkpoint sau mỗi chunk
                 f_out.flush()
                 os.fsync(f_out.fileno())
-                _save_checkpoint(output_file, processed, f_out.tell())
+                _save_checkpoint(output_file, processed, f_out.tell(), checkpoint_dir)
 
                 # Log progress
                 if processed % 5000 < chunk_size:
@@ -432,7 +438,7 @@ def process_split_parallel(
                     )
 
     # ── Hoàn thành → xoá checkpoint ──
-    _delete_checkpoint(output_file)
+    _delete_checkpoint(output_file, checkpoint_dir)
 
     elapsed = time.time() - t0
     avg = total_retrieved / max(processed - resume_from, 1)
@@ -472,6 +478,8 @@ def main():
                         help="Số câu mỗi chunk gửi cho worker. Default: 500")
     parser.add_argument("--cache_size_mb", type=int, default=128,
                         help="SQLite cache/worker (MB). Default: 128")
+    parser.add_argument("--checkpoint_dir", type=str, default=None,
+                        help="Thư mục lưu checkpoint resume. Default: cùng thư mục output")
 
     args = parser.parse_args()
 
@@ -493,6 +501,10 @@ def main():
     in_dir = Path(args.input_dir)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else None
+    if ckpt_dir:
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Checkpoint dir: %s", ckpt_dir)
 
     for split_name in args.splits:
         in_file = in_dir / split_name
@@ -516,6 +528,7 @@ def main():
             num_workers=args.num_workers,
             chunk_size=args.chunk_size,
             cache_size_mb=args.cache_size_mb,
+            checkpoint_dir=ckpt_dir,
         )
 
     logger.info("✓ Hoàn thành! Dataset *_doc đã lưu tại: %s", out_dir)

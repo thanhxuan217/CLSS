@@ -259,7 +259,23 @@ def _checkpoint_path(output_file: Path, checkpoint_dir: Path | None = None) -> P
     if checkpoint_dir is not None:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         return checkpoint_dir / name
-    return output_file.parent / name
+    # Fallback: try output_file.parent; if not writable, use /tmp
+    parent = output_file.parent
+    try:
+        parent.mkdir(parents=True, exist_ok=True)
+        # Quick write-access check
+        test = parent / ".write_test"
+        test.touch()
+        test.unlink()
+        return parent / name
+    except OSError:
+        import tempfile
+        tmp_dir = Path(tempfile.gettempdir())
+        logger.warning(
+            "  ⚠ Thư mục output '%s' chỉ đọc, lưu checkpoint vào: %s",
+            parent, tmp_dir,
+        )
+        return tmp_dir / name
 
 
 def _load_checkpoint(output_file: Path, checkpoint_dir: Path | None = None) -> tuple[int, int]:
@@ -501,10 +517,11 @@ def main():
     in_dir = Path(args.input_dir)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    ckpt_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else None
-    if ckpt_dir:
-        ckpt_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("Checkpoint dir: %s", ckpt_dir)
+    # Default checkpoint_dir to output_dir so checkpoints always land in a
+    # writable location (avoids OSError on read-only mounts like /kaggle/input)
+    ckpt_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else out_dir
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Checkpoint dir: %s", ckpt_dir)
 
     for split_name in args.splits:
         in_file = in_dir / split_name

@@ -887,6 +887,15 @@ class ColumnDataset(FlairDataset):
             if column_name_map[column] == "text":
                 self.text_column = column
 
+        # ── Parquet format support ────────────────────────────────────
+        if str(path_to_column_file).endswith('.parquet'):
+            if not self.in_memory:
+                log.warning("Parquet format requires in_memory=True. Forcing.")
+                self.in_memory = True
+                self.sentences: List[Sentence] = []
+            self._read_parquet_file()
+            return
+
         # determine encoding of text file
         encoding = "utf-8"
         try:
@@ -956,7 +965,56 @@ class ColumnDataset(FlairDataset):
     def reset_sentence_count(self):
         self.total_sentence_count = len(self.sentences)
         return
-    
+
+    def _read_parquet_file(self):
+        """Read dataset from a Parquet file. Requires a 'sentence_id' column."""
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ImportError(
+                "pandas and pyarrow are required to read .parquet files. "
+                "Install with: pip install pandas pyarrow"
+            )
+
+        df = pd.read_parquet(str(self.path_to_column_file))
+
+        if 'sentence_id' not in df.columns:
+            raise ValueError(
+                f"Parquet file must contain a 'sentence_id' column. "
+                f"Found columns: {list(df.columns)}"
+            )
+
+        # Map column indices to column names
+        col_names = {idx: name for idx, name in self.column_name_map.items()}
+        text_col_name = col_names[self.text_column]
+        tag_columns = {
+            idx: name for idx, name in col_names.items()
+            if idx != self.text_column
+        }
+
+        for _sent_id, group in df.groupby('sentence_id', sort=True):
+            sentence: Sentence = Sentence()
+            for row in group.itertuples(index=False):
+                token = Token(str(getattr(row, text_col_name)))
+                for _col_idx, col_name in tag_columns.items():
+                    if hasattr(row, col_name):
+                        token.add_tag(col_name, str(getattr(row, col_name)))
+                sentence.add_token(token)
+
+            if len(sentence) > 0:
+                sentence.infer_space_after()
+                if self.tag_to_bioes is not None:
+                    sentence.convert_tag_scheme(
+                        tag_type=self.tag_to_bioes, target_scheme="iobes"
+                    )
+                self.sentences.append(sentence)
+                self.total_sentence_count += 1
+
+        log.info(
+            f"Loaded {self.total_sentence_count} sentences "
+            f"from parquet: {self.path_to_column_file}"
+        )
+
     def is_in_memory(self) -> bool:
         return self.in_memory
 

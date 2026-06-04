@@ -1,0 +1,109 @@
+# Config: Sino-Nom Punctuation Restoration — SUBSET 25% trên Kaggle
+# Dựa trên sino_nom_doc_cl.yaml nhưng dùng subset data
+# Multi-view cooperative learning (CLSS / ACL-IJCNLP 2021)
+
+# ─── Model ────────────────────────────────────────────────────────────────────
+model:
+  FastSequenceTagger:
+    use_crf: true
+    use_rnn: false
+    use_cnn: false
+
+    # Cooperative learning
+    multi_view_training: true
+    distill_posterior: true
+    remove_x: true
+    sentence_loss: true
+
+    # Architecture
+    hidden_size: 256
+    dropout: 0.0
+    locked_dropout: 0.0
+    word_dropout: 0.1
+    temperature: 0.3
+
+    crf_attention: false
+    distill_crf: false
+
+# ─── Embeddings ───────────────────────────────────────────────────────────────
+embeddings:
+  TransformerWordEmbeddings-0:
+    model: SIKU-BERT/sikubert
+    fine_tune: true
+    layers: '-1'
+    pooling_operation: first
+
+# ─── Dataset ──────────────────────────────────────────────────────────────────
+targets: punct
+
+punct:
+  # View 1: Corpus gốc (subset 25%, không có retrieved context)
+  ColumnCorpus-SinoNomPunct:
+    column_format:
+      0: text
+      1: punct
+    data_folder: data/sino_nom_punct_subset
+
+  # View 2: Corpus doc (subset 25%, đã có MinHash RAG context)
+  ColumnCorpus-SinoNomPunctDoc:
+    column_format:
+      0: text
+      1: punct
+    data_folder: data/sino_nom_punct_doc_subset
+
+  # Kết hợp 2 corpus cho multi-view training
+  Corpus: ColumnCorpus-SinoNomPunct:ColumnCorpus-SinoNomPunctDoc
+
+  tag_dictionary: resources/taggers/sino_nom_punct_tags.pkl
+
+# ─── Training ─────────────────────────────────────────────────────────────────
+train:
+  fine_tune_mode: false
+  patience: 3
+  embeddings_storage_mode: none
+
+  learning_rate: 5.0e-5
+  lr_rate: 10000
+  use_warmup: false
+
+  mini_batch_size: 4
+  gradient_accumulation_steps: 4
+
+  max_epochs: 10
+
+  monitor_test: true
+  train_with_dev: false
+  true_reshuffle: false
+  save_final_model: true
+
+# ─── Trainer ──────────────────────────────────────────────────────────────────
+trainer: ModelFinetuner
+ModelFinetuner:
+  distill_mode: false
+  sentence_level_batch: true
+
+interpolation: 0.5
+
+# ─── Output ───────────────────────────────────────────────────────────────────
+target_dir: resources/taggers/
+model_name: sikubert_10epoch_subset25pct_sino_nom_punct_crf_multiview_posterior_minhash_rag
+
+# ─── MFVI (tắt mặc định) ─────────────────────────────────────────────────────
+MFVI:
+  use_second_order: false
+  use_third_order: false
+  use_hexalinear: false
+  use_quadrilinear: false
+  iterations: 3
+  normalize_weight: true
+  tag_dim: 150
+  quad_rank: 150
+  quad_std: 1
+  hexa_rank: 150
+  hexa_std: 1
+  window_size: 1
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+teacher_annealing: false
+is_teacher_list: true
+anneal_factor: 2

@@ -42,14 +42,16 @@ punct:
     column_format:
       0: text
       1: punct
-    data_folder: data/sino_nom_punct_subset
+    data_folder: /kaggle/input/datasets/xunhunh/subsettxt/data/sino_nom_punct_subset
+    in_memory: false
 
   # View 2: Corpus doc (subset 25%, đã có MinHash RAG context)
   ColumnCorpus-SinoNomPunctDoc:
     column_format:
       0: text
       1: punct
-    data_folder: data/sino_nom_punct_doc_subset
+    data_folder: /kaggle/input/datasets/xunhunh/subsettxt/data/sino_nom_punct_doc_subset
+    in_memory: false
 
   # Kết hợp 2 corpus cho multi-view training
   Corpus: ColumnCorpus-SinoNomPunct:ColumnCorpus-SinoNomPunctDoc

@@ -68,8 +68,8 @@ train:
   lr_rate: 10000
   use_warmup: false
 
-  mini_batch_size: 2
-  gradient_accumulation_steps: 8
+  mini_batch_size: 1
+  gradient_accumulation_steps: 16
 
   max_epochs: 10
 
@@ -83,6 +83,7 @@ trainer: ModelFinetuner
 ModelFinetuner:
   distill_mode: false
   sentence_level_batch: true
+  use_autocast: true
 
 interpolation: 0.5
 

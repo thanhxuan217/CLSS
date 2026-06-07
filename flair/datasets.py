@@ -889,9 +889,7 @@ class ColumnDataset(FlairDataset):
 
         # ── Parquet format support ────────────────────────────────────
         if str(path_to_column_file).endswith('.parquet'):
-            if not self.in_memory:
-                log.warning("Parquet format requires in_memory=True. Forcing.")
-                self.in_memory = True
+            if self.in_memory:
                 self.sentences: List[Sentence] = []
             self._read_parquet_file()
             return
@@ -986,34 +984,41 @@ class ColumnDataset(FlairDataset):
 
         # Map column indices to column names
         col_names = {idx: name for idx, name in self.column_name_map.items()}
-        text_col_name = col_names[self.text_column]
-        tag_columns = {
+        self.text_col_name = col_names[self.text_column]
+        self.tag_columns = {
             idx: name for idx, name in col_names.items()
             if idx != self.text_column
         }
 
-        for _sent_id, group in df.groupby('sentence_id', sort=True):
-            sentence: Sentence = Sentence()
-            for row in group.itertuples(index=False):
-                token = Token(str(getattr(row, text_col_name)))
-                for _col_idx, col_name in tag_columns.items():
-                    if hasattr(row, col_name):
-                        token.add_tag(col_name, str(getattr(row, col_name)))
-                sentence.add_token(token)
-
-            if len(sentence) > 0:
-                sentence.infer_space_after()
-                if self.tag_to_bioes is not None:
-                    sentence.convert_tag_scheme(
-                        tag_type=self.tag_to_bioes, target_scheme="iobes"
-                    )
+        self.total_sentence_count = df['sentence_id'].nunique()
+        if self.in_memory:
+            for _sent_id, group in df.groupby('sentence_id', sort=True):
+                sentence = self._build_sentence_from_parquet_group(group)
                 self.sentences.append(sentence)
-                self.total_sentence_count += 1
+        else:
+            self.parquet_groups = [group for _, group in df.groupby('sentence_id', sort=True)]
 
         log.info(
             f"Loaded {self.total_sentence_count} sentences "
-            f"from parquet: {self.path_to_column_file}"
+            f"from parquet: {self.path_to_column_file} (in_memory={self.in_memory})"
         )
+
+    def _build_sentence_from_parquet_group(self, group) -> Sentence:
+        sentence: Sentence = Sentence()
+        for row in group.itertuples(index=False):
+            token = Token(str(getattr(row, self.text_col_name)))
+            for _col_idx, col_name in self.tag_columns.items():
+                if hasattr(row, col_name):
+                    token.add_tag(col_name, str(getattr(row, col_name)))
+            sentence.add_token(token)
+
+        if len(sentence) > 0:
+            sentence.infer_space_after()
+            if self.tag_to_bioes is not None:
+                sentence.convert_tag_scheme(
+                    tag_type=self.tag_to_bioes, target_scheme="iobes"
+                )
+        return sentence
 
     def is_in_memory(self) -> bool:
         return self.in_memory
@@ -1024,6 +1029,8 @@ class ColumnDataset(FlairDataset):
     def __getitem__(self, index: int = 0) -> Sentence:
         if self.in_memory:
             sentence = self.sentences[index]
+        elif str(self.path_to_column_file).endswith('.parquet'):
+            sentence = self._build_sentence_from_parquet_group(self.parquet_groups[index])
 
         else:
             with open(str(self.path_to_column_file), encoding="utf-8") as file:

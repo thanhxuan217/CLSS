@@ -21,7 +21,7 @@ from flair.config_parser import ConfigParser
 import sys
 import os
 import logging
-from flair.custom_data_loader import ColumnDataLoader
+from flair.custom_data_loader import ColumnDataLoader, LazyColumnDataLoader
 from flair.datasets import DataLoader
 # Disable
 def blockPrint():
@@ -152,7 +152,7 @@ if args.test_speed:
 	print(count_parameters(student))
 	# for embedding in student.embeddings.embeddings:
 	# 	embedding.training = False
-	test_loader=ColumnDataLoader(list(trainer.corpus.test),32,use_bert=trainer.use_bert,tokenizer=trainer.bert_tokenizer, sort_data=False, model = student, sentence_level_batch = True)
+	test_loader=LazyColumnDataLoader(trainer.corpus.test,32,use_bert=trainer.use_bert,tokenizer=trainer.bert_tokenizer, sort_data=False, model = student, sentence_level_batch = True)
 	test_loader.assign_tags(student.tag_type,student.tag_dictionary)
 	train_eval_result, train_loss = student.evaluate(test_loader,embeddings_storage_mode='none',speed_test=True)
 	# print('Current accuracy: ' + str(train_eval_result.main_score*100))
@@ -271,7 +271,7 @@ elif args.parse or args.save_embedding:
 			if len(subcorpus)==0:
 				continue
 			print('Current Lang: ', corpus.targets[index])
-			loader=ColumnDataLoader(list(subcorpus),eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
+			loader=LazyColumnDataLoader(subcorpus,eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
 			loader.assign_tags(student.tag_type,student.tag_dictionary)
 			train_eval_result, train_loss = student.evaluate(loader,embeddings_storage_mode='none',
 				out_path=Path('system_pred/dev.'+config.config['model_name']+'.conllu'),)
@@ -284,7 +284,7 @@ elif args.parse or args.save_embedding:
 			if len(subcorpus)==0:
 				continue
 			print('Current Lang: ', corpus.targets[index])
-			loader=ColumnDataLoader(list(subcorpus),eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
+			loader=LazyColumnDataLoader(subcorpus,eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
 			loader.assign_tags(student.tag_type,student.tag_dictionary)
 			train_eval_result, train_loss = student.evaluate(
 				loader,
@@ -314,7 +314,7 @@ elif args.parse or args.save_embedding:
 			if len(subcorpus)==0:
 				continue
 			print('Current Lang: ', corpus.targets[index])
-			loader=ColumnDataLoader(list(subcorpus),eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
+			loader=LazyColumnDataLoader(subcorpus,eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
 			loader.assign_tags(student.tag_type,student.tag_dictionary)
 			train_eval_result, train_loss = student.evaluate(
 				loader,
@@ -338,7 +338,7 @@ elif args.parse or args.save_embedding:
 				print('Parsing the file: '+tar_file_name)
 				write_name='outputs/train.'+config.config['model_name']+'.'+tar_file_name+'.conllu'
 				print('Writing to file: '+write_name)
-				loader=ColumnDataLoader(list(corpus.train),eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
+				loader=LazyColumnDataLoader(corpus.train,eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
 				loader.assign_tags(student.tag_type,student.tag_dictionary)
 				train_eval_result, train_loss = student.evaluate(loader,out_path=Path(write_name),embeddings_storage_mode="none",prediction_mode=True)
 				if train_eval_result is not None:
@@ -350,21 +350,21 @@ elif args.parse or args.save_embedding:
 			else:
 				corpus=datasets.ColumnCorpus(args.target_dir, column_format={0: 'text', 1: student.tag_type}, tag_to_bioes=None)
 			tar_file_name = str(Path(args.target_dir)).split('/')[-1]
-			loader=ColumnDataLoader(list(corpus.train),eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
+			loader=LazyColumnDataLoader(corpus.train,eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
 			loader.assign_tags(student.tag_type,student.tag_dictionary)
 			train_eval_result, train_loss = student.evaluate(loader,out_path=Path('outputs/train.'+config.config['model_name']+'.'+tar_file_name+'.conllu'),embeddings_storage_mode="none",prediction_mode=True)
 			if train_eval_result is not None:
 				print('Current accuracy: ' + str(train_eval_result.main_score*100))
 				print(train_eval_result.detailed_results)
 	elif args.parse_test:
-		loader=ColumnDataLoader(list(corpus.test),eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
+		loader=LazyColumnDataLoader(corpus.test,eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
 		loader.assign_tags(student.tag_type,student.tag_dictionary)
 		train_eval_result, train_loss = student.evaluate(loader,out_path=Path('system_pred/test.'+config.config['model_name']+'.conllu'),embeddings_storage_mode="none",prediction_mode=True)
 		if train_eval_result is not None:
 			print('Current accuracy: ' + str(train_eval_result.main_score*100))
 			print(train_eval_result.detailed_results)
 	else:
-		loader=ColumnDataLoader(list(corpus.train),eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
+		loader=LazyColumnDataLoader(corpus.train,eval_mini_batch_size,use_bert=student.use_bert, model = student, sort_data = not args.keep_order, sentence_level_batch = config.config[trainer_name]['sentence_level_batch'] if 'sentence_level_batch' in config.config[trainer_name] else True)
 		loader.assign_tags(student.tag_type,student.tag_dictionary)
 		train_eval_result, train_loss = student.evaluate(loader,out_path=Path('outputs/train.'+config.config['model_name']+'.'+corpus.targets[0]+'.conllu'),embeddings_storage_mode="none",prediction_mode=True)
 		if train_eval_result is not None:

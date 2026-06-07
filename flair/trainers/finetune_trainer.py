@@ -621,26 +621,26 @@ class ModelFinetuner(ModelDistiller):
 			for teacher in self.teachers:
 				del teacher
 			del self.teachers
-			batch_loader=ColumnDataLoader(train_data,mini_batch_size,shuffle,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
+			batch_loader=LazyColumnDataLoader(train_data,mini_batch_size,shuffle,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
 		else:
-			batch_loader=ColumnDataLoader(ConcatDataset(train_data),mini_batch_size,shuffle,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
+			batch_loader=LazyColumnDataLoader(ConcatDataset(train_data),mini_batch_size,shuffle,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
 		batch_loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 		if self.distill_mode:
 			batch_loader=self.resort(batch_loader,is_crf=self.model.distill_crf, is_posterior = self.model.distill_posterior or self.model.distill_exact, is_token_att = self.model.token_level_attention)
 		if not train_with_dev:
 			if macro_avg:
-				dev_loaders=[ColumnDataLoader(list(subcorpus),eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch) \
+				dev_loaders=[LazyColumnDataLoader(subcorpus,eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch) \
 							 for subcorpus in self.corpus.dev_list]
 				for loader in dev_loaders:
 					loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 
 			else:
-				dev_loader=ColumnDataLoader(list(self.corpus.dev),eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
+				dev_loader=LazyColumnDataLoader(self.corpus.dev,eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
 				dev_loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
-		test_loader=ColumnDataLoader(list(self.corpus.test),eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
+		test_loader=LazyColumnDataLoader(self.corpus.test,eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
 		test_loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 		if self.use_unlabeled_data:
-			unlabeled_loader = ColumnDataLoader(self.unlabeled_corpus,mini_batch_size,shuffle,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
+			unlabeled_loader = LazyColumnDataLoader(self.unlabeled_corpus,mini_batch_size,shuffle,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
 
 		# if self.distill_mode:
 		#   batch_loader.expand_teacher_predictions()
@@ -701,7 +701,7 @@ class ModelFinetuner(ModelDistiller):
 			calc_teachers_target_loss = False
 			warmup_bias = 0
 		if train_language_attention_by_dev:  
-			dev_att_loader=ColumnDataLoader(dev_data,mini_batch_size,shuffle,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
+			dev_att_loader=LazyColumnDataLoader(dev_data,mini_batch_size,shuffle,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
 			dev_att_loader=self.resort(dev_att_loader,is_crf=self.model.distill_crf, is_posterior = self.model.distill_posterior or self.model.distill_exact, is_token_att = self.model.token_level_attention)
 			self.train_language_attention(dev_att_loader,optimizer,language_attention_entropy=language_attention_entropy,entropy_loss_rate=entropy_loss_rate,max_epochs=30)
 
@@ -721,7 +721,7 @@ class ModelFinetuner(ModelDistiller):
 			for index,subcorpus in enumerate(dev_data_teacher):
 				# log_line(log)
 				# log.info('current corpus: '+self.corpus.targets[index])
-				loader=ColumnDataLoader(list(subcorpus),eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
+				loader=LazyColumnDataLoader(subcorpus,eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch)
 				loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 				loader=self.resort(loader,is_crf=self.model.distill_crf, is_posterior = self.model.distill_posterior or self.model.distill_exact, is_token_att = self.model.token_level_attention)
 				if self.model.use_language_attention and self.model.biaf_attention and self.model.use_language_vector:
@@ -1157,7 +1157,7 @@ class ModelFinetuner(ModelDistiller):
 							log_line(log)
 							log.info('current corpus: '+subcorpus.name)
 							current_result, test_loss = self.model.evaluate(
-								ColumnDataLoader(list(subcorpus.test),eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch),
+								LazyColumnDataLoader(subcorpus.test,eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch),
 								out_path=base_path / f"{subcorpus.name}-test.tsv",
 								embeddings_storage_mode=embeddings_storage_mode,
 							)
@@ -1168,7 +1168,7 @@ class ModelFinetuner(ModelDistiller):
 							log_line(log)
 							log.info('current corpus: '+self.corpus.targets[index])
 							current_result, test_loss = self.model.evaluate(
-								ColumnDataLoader(list(subcorpus),eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch),
+								LazyColumnDataLoader(subcorpus,eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, sort_data=sort_data, model = self.model, sentence_level_batch = self.sentence_level_batch),
 								out_path=base_path / f"{self.corpus.targets[index]}-test.tsv",
 								embeddings_storage_mode=embeddings_storage_mode,
 							)
@@ -1387,7 +1387,7 @@ class ModelFinetuner(ModelDistiller):
 				target = self.corpus.targets[index]
 				if target not in teacher.targets:
 					continue
-				loader=ColumnDataLoader(list(train_data),self.mini_batch_size,grouped_data=False,use_bert=use_bert, model = teacher, sentence_level_batch = self.sentence_level_batch)
+				loader=LazyLazyColumnDataLoader(train_data,self.mini_batch_size,grouped_data=False,use_bert=use_bert, model = teacher, sentence_level_batch = self.sentence_level_batch)
 				loader.word_map = teacher.word_map
 				loader.char_map = teacher.char_map
 				if self.model.tag_dictionary.item2idx !=teacher.tag_dictionary.item2idx:
@@ -1474,7 +1474,7 @@ class ModelFinetuner(ModelDistiller):
 				target = self.corpus.targets[index]
 				if target not in teacher.targets:
 					continue
-				loader=ColumnDataLoader(list(train_data),self.mini_batch_size,grouped_data=False,use_bert=use_bert, model = teacher, sentence_level_batch = self.sentence_level_batch)
+				loader=LazyLazyColumnDataLoader(train_data,self.mini_batch_size,grouped_data=False,use_bert=use_bert, model = teacher, sentence_level_batch = self.sentence_level_batch)
 				loader.word_map = teacher.word_map
 				loader.char_map = teacher.char_map
 				if self.model.tag_dictionary.item2idx !=teacher.tag_dictionary.item2idx:
@@ -2011,7 +2011,7 @@ class ModelFinetuner(ModelDistiller):
 		elif (base_path / "final-model.pt").exists():
 			self.model = self.model.load(base_path / "final-model.pt")
 			log.info("Testing using final model ...")
-		loader=ColumnDataLoader(list(self.corpus.test),eval_mini_batch_size, use_bert=self.use_bert,tokenizer=self.bert_tokenizer)
+		loader=LazyColumnDataLoader(self.corpus.test,eval_mini_batch_size, use_bert=self.use_bert,tokenizer=self.bert_tokenizer)
 		loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 		XE=torch.zeros(len(range(min_k,max_k))).float().cuda()
 		weighted_XE=torch.zeros(len(range(min_k,max_k))).float().cuda()
@@ -2098,7 +2098,7 @@ class ModelFinetuner(ModelDistiller):
 			if (hasattr(embedding,'fine_tune') and embedding.fine_tune):
 				embedding.fine_tune = False
 		if overall_test:
-			loader=ColumnDataLoader(list(self.corpus.test),eval_mini_batch_size, use_bert=self.use_bert,tokenizer=self.bert_tokenizer, model = self.model, sentence_level_batch = self.sentence_level_batch, sort_data=sort_data)
+			loader=LazyColumnDataLoader(self.corpus.test,eval_mini_batch_size, use_bert=self.use_bert,tokenizer=self.bert_tokenizer, model = self.model, sentence_level_batch = self.sentence_level_batch, sort_data=sort_data)
 			loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 			with torch.no_grad():
 				self.gpu_friendly_assign_embedding([loader])
@@ -2140,7 +2140,7 @@ class ModelFinetuner(ModelDistiller):
 			for subcorpus in self.corpus.corpora:
 				log_line(log)
 				log.info('current corpus: '+subcorpus.name)
-				loader=ColumnDataLoader(list(subcorpus.test),eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, model = self.model, sentence_level_batch = self.sentence_level_batch, sort_data=sort_data)
+				loader=LazyColumnDataLoader(subcorpus.test,eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, model = self.model, sentence_level_batch = self.sentence_level_batch, sort_data=sort_data)
 				loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 				with torch.no_grad():
 					self.gpu_friendly_assign_embedding([loader])
@@ -2171,7 +2171,7 @@ class ModelFinetuner(ModelDistiller):
 			for index,subcorpus in enumerate(self.corpus.test_list):
 				log_line(log)
 				log.info('current corpus: '+self.corpus.targets[index])
-				loader=ColumnDataLoader(list(subcorpus),eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, model = self.model, sentence_level_batch = self.sentence_level_batch, sort_data=sort_data)
+				loader=LazyColumnDataLoader(subcorpus,eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, model = self.model, sentence_level_batch = self.sentence_level_batch, sort_data=sort_data)
 				loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 				with torch.no_grad():
 					self.gpu_friendly_assign_embedding([loader])
@@ -2245,7 +2245,7 @@ class ModelFinetuner(ModelDistiller):
 		print('Batch Size: ', mini_batch_size)
 		step = 0
 		while step < iterations:
-			batch_loader=ColumnDataLoader(list(train_data),mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer)            
+			batch_loader=LazyLazyColumnDataLoader(train_data,mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer)            
 			# batch_loader = DataLoader(
 			#     train_data, batch_size=mini_batch_size, shuffle=True
 			# )
@@ -2411,7 +2411,7 @@ class ModelFinetuner(ModelDistiller):
 
 	#     train_data = self.corpus.train
 	#     print('Batch Size: ',mini_batch_size)
-	#     batch_loader=ColumnDataLoader(list(train_data),mini_batch_size,use_bert=self.use_bert)
+	#     batch_loader=LazyLazyColumnDataLoader(train_data,mini_batch_size,use_bert=self.use_bert)
 	#     # batch_loader = DataLoader(train_data, batch_size=mini_batch_size, shuffle=True)
 
 	#     scheduler = ExpAnnealLR(optimizer, end_learning_rate, iterations)

@@ -68,8 +68,8 @@ train:
   lr_rate: 10000
   use_warmup: false
 
-  mini_batch_size: 1
-  gradient_accumulation_steps: 16
+  mini_batch_size: 16
+  gradient_accumulation_steps: 1
 
   max_epochs: 10
 

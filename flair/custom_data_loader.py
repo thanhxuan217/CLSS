@@ -415,3 +415,64 @@ class ColumnDataLoader:
 			c_id += [char_map[unk]] * (max_length - len(c_id))
 			char_idxs.append(c_id)
 		return torch.LongTensor(char_idxs).transpose(0, 1), torch.LongTensor(char_lens)
+
+class LazyColumnDataLoader(ColumnDataLoader):
+	def __init__(self, dataset, batch_size, shuffle=False, args=None, grouped_data=False, use_bert=False, tokenizer=None, sort_data = True, sentence_level_batch = False, model = None):
+		self.dataset = dataset
+		self.batch_size = batch_size
+		self.args = args
+		self.shuffled = shuffle
+		self.model = model
+		self.grouped_data = grouped_data
+		self.sentence_level_batch = sentence_level_batch
+		self.use_bert = use_bert
+		self.tokenizer = tokenizer
+		if self.use_bert and self.tokenizer is None:
+			self.tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased')
+
+		if hasattr(self.dataset, '__len__'):
+			self.num_examples = len(self.dataset)
+		else:
+			self.num_examples = sum(1 for _ in self.dataset)
+			
+		self.tag_type = None
+		self.tag_dictionary = None
+
+		self.reshuffle()
+
+	def reshuffle(self):
+		indices = list(range(self.num_examples))
+		if self.shuffled:
+			random.shuffle(indices)
+		self.batches = [indices[i:i + self.batch_size] for i in range(0, self.num_examples, self.batch_size)]
+
+	def true_reshuffle(self):
+		self.reshuffle()
+
+	def __len__(self):
+		return len(self.batches)
+
+	def assign_tags(self, tag_type, tag_dictionary, teacher_input=None, grouped_data=False):
+		self.tag_type = tag_type
+		self.tag_dictionary = tag_dictionary
+
+	def __getitem__(self, key):
+		if not isinstance(key, int): raise TypeError
+		if key < 0 or key >= len(self.batches): raise IndexError
+		
+		batch_indices = self.batches[key]
+		batch = [self.dataset[i] for i in batch_indices]
+		
+		# Store in self.data so that parent methods can process it
+		self.data = [batch]
+		
+		# Process tags (reuse ColumnDataLoader's assign_tags logic)
+		if self.tag_type is not None and self.tag_dictionary is not None:
+			super().assign_tags(self.tag_type, self.tag_dictionary, grouped_data=self.grouped_data)
+			
+		return self.data[0]
+
+	def __iter__(self):
+		for i in range(len(self)):
+			yield self[i]
+

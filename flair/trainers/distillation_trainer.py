@@ -5,7 +5,7 @@ import math
 import random
 import copy
 from flair.datasets import CoupleDataset
-from ..custom_data_loader import ColumnDataLoader
+from ..custom_data_loader import ColumnDataLoader, LazyColumnDataLoader
 from torch.optim.adam import Adam
 import torch.nn.functional as F
 import traceback
@@ -315,17 +315,17 @@ class ModelDistiller(ModelTrainer):
 			for teacher in self.teachers:
 				del teacher
 			del self.teachers, self.corpus_teacher  
-			batch_loader=ColumnDataLoader(train_data,mini_batch_size,shuffle,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+			batch_loader=LazyColumnDataLoader(train_data,mini_batch_size,shuffle,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 		else:
-			batch_loader=ColumnDataLoader(ConcatDataset(train_data),mini_batch_size,shuffle,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+			batch_loader=LazyColumnDataLoader(ConcatDataset(train_data),mini_batch_size,shuffle,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 		batch_loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 		if self.distill_mode:
 			if faster:
 				batch_loader=self.resort(batch_loader,is_crf=self.model.distill_crf, is_posterior = self.model.distill_posterior, is_token_att = self.model.token_level_attention)
 
-		dev_loader=ColumnDataLoader(list(self.corpus.dev),eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+		dev_loader=LazyColumnDataLoader(self.corpus.dev,eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 		dev_loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
-		test_loader=ColumnDataLoader(list(self.corpus.test),eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+		test_loader=LazyColumnDataLoader(self.corpus.test,eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 		test_loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 		# if self.distill_mode:
 		#   batch_loader.expand_teacher_predictions()
@@ -525,7 +525,7 @@ class ModelDistiller(ModelTrainer):
 							log_line(log)
 							log.info('current corpus: '+subcorpus.name)
 							current_result, test_loss = self.model.evaluate(
-								ColumnDataLoader(list(subcorpus.test),eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch),
+								LazyColumnDataLoader(subcorpus.test,eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch),
 								out_path=base_path / f"{subcorpus.name}-test.tsv",
 								embeddings_storage_mode=embeddings_storage_mode,
 							)
@@ -536,7 +536,7 @@ class ModelDistiller(ModelTrainer):
 							log_line(log)
 							log.info('current corpus: '+self.corpus.targets[index])
 							current_result, test_loss = self.model.evaluate(
-								ColumnDataLoader(list(subcorpus),eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch),
+								LazyColumnDataLoader(subcorpus,eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch),
 								out_path=base_path / f"{self.corpus.targets[index]}-test.tsv",
 								embeddings_storage_mode=embeddings_storage_mode,
 							)
@@ -711,7 +711,7 @@ class ModelDistiller(ModelTrainer):
 				target = self.corpus.targets[index]
 				if target not in teacher.targets:
 					continue
-				loader=ColumnDataLoader(list(train_data),self.mini_batch_size,grouped_data=True,use_bert=use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+				loader=LazyLazyColumnDataLoader(train_data,self.mini_batch_size,grouped_data=True,use_bert=use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 				for batch in loader:
 					counter+=len(batch)
 					student_input, teacher_input = zip(*batch)
@@ -771,7 +771,7 @@ class ModelDistiller(ModelTrainer):
 				target = self.corpus.targets[index]
 				if target not in teacher.targets:
 					continue
-				loader=ColumnDataLoader(list(train_data),self.mini_batch_size,grouped_data=True,use_bert=use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+				loader=LazyLazyColumnDataLoader(train_data,self.mini_batch_size,grouped_data=True,use_bert=use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 				for batch in loader:
 					counter+=len(batch)
 					student_input, teacher_input = zip(*batch)
@@ -903,7 +903,7 @@ class ModelDistiller(ModelTrainer):
 		elif (base_path / "final-model.pt").exists():
 			self.model = self.model.load(base_path / "final-model.pt")
 			log.info("Testing using final model ...")
-		loader=ColumnDataLoader(list(self.corpus.test),eval_mini_batch_size, use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+		loader=LazyColumnDataLoader(self.corpus.test,eval_mini_batch_size, use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 		loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 		XE=torch.zeros(len(range(min_k,max_k))).float().cuda()
 		weighted_XE=torch.zeros(len(range(min_k,max_k))).float().cuda()
@@ -977,7 +977,7 @@ class ModelDistiller(ModelTrainer):
 		if predict_posterior:
 			self.model.predict_posterior=True
 		if overall_test:
-			loader=ColumnDataLoader(list(self.corpus.test),eval_mini_batch_size, use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+			loader=LazyColumnDataLoader(self.corpus.test,eval_mini_batch_size, use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 			loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 			test_results, test_loss = self.model.evaluate(
 				loader,
@@ -997,7 +997,7 @@ class ModelDistiller(ModelTrainer):
 			for subcorpus in self.corpus.corpora:
 				log_line(log)
 				log.info('current corpus: '+subcorpus.name)
-				loader=ColumnDataLoader(list(subcorpus.test),eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+				loader=LazyColumnDataLoader(subcorpus.test,eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 				loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 				current_result, test_loss = self.model.evaluate(
 					loader,
@@ -1014,7 +1014,7 @@ class ModelDistiller(ModelTrainer):
 			for index,subcorpus in enumerate(self.corpus.test_list):
 				log_line(log)
 				log.info('current corpus: '+self.corpus.targets[index])
-				loader=ColumnDataLoader(list(subcorpus),eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+				loader=LazyColumnDataLoader(subcorpus,eval_mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 				loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 				current_result, test_loss = self.model.evaluate(
 					loader,
@@ -1069,7 +1069,7 @@ class ModelDistiller(ModelTrainer):
 		print('Batch Size: ', mini_batch_size)
 		step = 0
 		while step < iterations:
-			batch_loader=ColumnDataLoader(list(train_data),mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
+			batch_loader=LazyLazyColumnDataLoader(train_data,mini_batch_size,use_bert=self.use_bert, model = self.model, sentence_level_batch = self.sentence_level_batch)
 			# batch_loader = DataLoader(
 			#     train_data, batch_size=mini_batch_size, shuffle=True
 			# )

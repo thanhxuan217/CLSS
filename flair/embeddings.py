@@ -2918,7 +2918,10 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         self.model = AutoModel.from_pretrained(model, config=config, **kwargs)
 
         self.allow_long_sentences = allow_long_sentences
-        if not hasattr(self.tokenizer,'model_max_length'):
+        if hasattr(self.model.config, 'max_position_embeddings'):
+            if not hasattr(self.tokenizer, 'model_max_length') or self.tokenizer.model_max_length > self.model.config.max_position_embeddings:
+                self.tokenizer.model_max_length = self.model.config.max_position_embeddings
+        if not hasattr(self.tokenizer,'model_max_length') or self.tokenizer.model_max_length > 100000:
             self.tokenizer.model_max_length = 512
         if allow_long_sentences:
             self.max_subtokens_sequence_length = self.tokenizer.model_max_length

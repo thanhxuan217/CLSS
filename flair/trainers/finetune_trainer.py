@@ -985,17 +985,20 @@ class ModelFinetuner(ModelDistiller):
 					seen_batches += 1
 					batch_time += time.time() - start_time
 					if (batch_no+1)%gradient_accumulation_steps==0 or (batch_no == total_number_of_batches - 1):
-						if use_autocast:
+						has_gradients = any(p.grad is not None for group in optimizer.param_groups for p in group['params'])
+						if use_autocast and has_gradients:
 							scaler.unscale_(optimizer)
 						torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
 						if len(self.update_params_group)>0:
 							torch.nn.utils.clip_grad_norm_(self.update_params_group, 5.0)
 						# print("update model")
 						if use_autocast:
-							scaler.step(optimizer)
-							scaler.update()
+							if has_gradients:
+								scaler.step(optimizer)
+								scaler.update()
 						else:
-							optimizer.step()
+							if has_gradients:
+								optimizer.step()
 						self.model.zero_grad()
 
 						# optimizer.zero_grad()

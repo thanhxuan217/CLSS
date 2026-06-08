@@ -125,20 +125,30 @@ def count_sentences_in_file(file_path: Path, text_col: int = 0, tag_col: int = 1
 def _format_conll_doc_single(
     sent: Sentence,
     retrieved_sents: list[str],
+    max_seq_len: int = 500,
     eos_tag: str = "S-X",
     retrieved_tag: str = "S-X",
 ) -> str:
     """Format 1 câu dataset *_doc thành string."""
     parts: list[str] = ["-DOCSTART- O\n\n"]
 
+    current_len = 0
     for token, tag in sent:
         parts.append(f"{token}\t{tag}\n")
+        current_len += 1
 
     if retrieved_sents:
-        parts.append(f"<EOS>\t{eos_tag}\n")
-        for ret_sent in retrieved_sents:
-            for char_token in ret_sent.replace(" ", ""):
-                parts.append(f"{char_token}\t{retrieved_tag}\n")
+        if current_len < max_seq_len:
+            parts.append(f"<EOS>\t{eos_tag}\n")
+            current_len += 1
+            for ret_sent in retrieved_sents:
+                for char_token in ret_sent.replace(" ", ""):
+                    if current_len >= max_seq_len:
+                        break
+                    parts.append(f"{char_token}\t{retrieved_tag}\n")
+                    current_len += 1
+                if current_len >= max_seq_len:
+                    break
 
     parts.append("\n")
     return "".join(parts)
@@ -367,6 +377,7 @@ def process_split_parallel(
     max_jaccard: float,
     text_col: int,
     tag_col: int,
+    max_seq_len: int,
     num_workers: int,
     chunk_size: int,
     cache_size_mb: int,
@@ -427,7 +438,7 @@ def process_split_parallel(
             for chunk_results in pool.imap(_process_chunk, chunk_gen):
                 for sent, retrieved in chunk_results:
                     # Ghi bằng bytes để byte_offset chính xác
-                    line = _format_conll_doc_single(sent, retrieved)
+                    line = _format_conll_doc_single(sent, retrieved, max_seq_len=max_seq_len)
                     f_out.write(line.encode("utf-8"))
                     total_retrieved += len(retrieved)
                     if not retrieved:
@@ -483,6 +494,8 @@ def main():
 
     parser.add_argument("--text_col", type=int, default=0)
     parser.add_argument("--tag_col", type=int, default=1)
+    parser.add_argument("--max_seq_len", type=int, default=500,
+                        help="Độ dài tối đa của câu ghép để tránh quá giới hạn model. Default: 500")
 
     parser.add_argument("--splits", nargs="+",
                         default=["train.txt", "dev.txt", "test.txt"])
@@ -542,6 +555,7 @@ def main():
             max_jaccard=args.max_jaccard,
             text_col=args.text_col,
             tag_col=args.tag_col,
+            max_seq_len=args.max_seq_len,
             num_workers=args.num_workers,
             chunk_size=args.chunk_size,
             cache_size_mb=args.cache_size_mb,

@@ -92,6 +92,7 @@ def write_conll_doc_single(
     f,
     sent: Sentence,
     retrieved_sents: list[str],
+    max_seq_len: int = 500,
     eos_tag: str = "S-X",
     retrieved_tag: str = "S-X",
 ) -> None:
@@ -107,17 +108,26 @@ def write_conll_doc_single(
     f.write("-DOCSTART- O\n\n")
 
     # Câu gốc
+    current_len = 0
     for token, tag in sent:
         f.write(f"{token}\t{tag}\n")
+        current_len += 1
 
     if retrieved_sents:
-        # EOS separator
-        f.write(f"<EOS>\t{eos_tag}\n")
+        if current_len < max_seq_len:
+            # EOS separator
+            f.write(f"<EOS>\t{eos_tag}\n")
+            current_len += 1
 
-        # Các câu retrieved
-        for ret_sent in retrieved_sents:
-            for char_token in ret_sent.replace(" ", ""):
-                f.write(f"{char_token}\t{retrieved_tag}\n")
+            # Các câu retrieved
+            for ret_sent in retrieved_sents:
+                for char_token in ret_sent.replace(" ", ""):
+                    if current_len >= max_seq_len:
+                        break
+                    f.write(f"{char_token}\t{retrieved_tag}\n")
+                    current_len += 1
+                if current_len >= max_seq_len:
+                    break
 
     f.write("\n")
 
@@ -222,6 +232,7 @@ def process_split(
     max_jaccard: float,
     text_col: int,
     tag_col: int,
+    max_seq_len: int,
 ) -> None:
     logger.info("Xử lý: %s → %s", input_file.name, output_file.name)
     
@@ -242,7 +253,7 @@ def process_split(
             if not retrieved:
                 no_result += 1
 
-            write_conll_doc_single(f_out, sent, retrieved)
+            write_conll_doc_single(f_out, sent, retrieved, max_seq_len=max_seq_len)
             
             i += 1
             if i % 500 == 0:
@@ -286,6 +297,8 @@ def main():
                         help="Cột text trong CoNLL file (0-indexed). Default: 0")
     parser.add_argument("--tag_col", type=int, default=1,
                         help="Cột NER tag trong CoNLL file (0-indexed). Default: 1")
+    parser.add_argument("--max_seq_len", type=int, default=500,
+                        help="Độ dài tối đa (số token) của câu ghép để tránh quá giới hạn model. Default: 500")
 
     parser.add_argument("--splits", nargs="+",
                         default=["train.txt", "dev.txt", "test.txt"],
@@ -326,6 +339,7 @@ def main():
             max_jaccard=args.max_jaccard,
             text_col=args.text_col,
             tag_col=args.tag_col,
+            max_seq_len=args.max_seq_len,
         )
 
     lsh.close()

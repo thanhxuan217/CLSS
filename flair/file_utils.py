@@ -29,9 +29,9 @@ def load_big_file(f):
     :return:
     """
     logger.info(f"loading file {f}")
-    with open(f, "r+b") as f_in:
+    with open(f, "rb") as f_in:
         # mmap seems to be much more memory efficient
-        bf = mmap.mmap(f_in.fileno(), 0)
+        bf = mmap.mmap(f_in.fileno(), 0, access=mmap.ACCESS_READ)
         f_in.close()
     return bf
 

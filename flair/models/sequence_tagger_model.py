@@ -2588,7 +2588,16 @@ class FastSequenceTagger(SequenceTagger):
 
 			lines: List[str] = []
 			if out_path is not None:
-				outfile = open(out_path, "w", encoding="utf-8")
+				try:
+					outfile = open(out_path, "w", encoding="utf-8")
+				except OSError:
+					import os
+					from pathlib import Path
+					fallback_dir = Path.cwd() / "output"
+					os.makedirs(fallback_dir, exist_ok=True)
+					out_path = fallback_dir / Path(out_path).name
+					outfile = open(out_path, "w", encoding="utf-8")
+					print(f"Warning: original out_path is read-only. Saving to {out_path} instead.")
 			if speed_test:
 				start_time = time.time()
 			for batch in data_loader:

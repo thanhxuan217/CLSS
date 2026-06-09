@@ -7,7 +7,7 @@
 # ============================================================================
 # WORKING DIRECTORY & ENVIRONMENT
 # ============================================================================
-export WORKING_DIR="/media02/ddien02/thanhxuan217/CLSS"
+export WORKING_DIR="/media02/ddien02/thanhxuan217/main_src"
 export CONDA_PATH="/media02/ddien02/datnd/miniconda3/etc/profile.d/conda.sh"
 export CONDA_ENV="/media02/ddien02/thanhxuan217/envs/sikubert"
 
@@ -19,7 +19,7 @@ export TRAIN_CONFIG="config/sino_nom_doc_cl.yaml"
 
 # Override transformer model path (local directory hoặc HuggingFace name)
 # Nếu server offline: đổi thành đường dẫn local, ví dụ "${WORKING_DIR}/models/sikubert"
-export TRANSFORMER_MODEL="${WORKING_DIR}/models/sikubert"
+export TRANSFORMER_MODEL="${WORKING_DIR}/pretrained/sikubert"
 
 # ============================================================================
 # OUTPUT

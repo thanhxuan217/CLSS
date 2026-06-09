@@ -3169,12 +3169,16 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         longest_sequence_in_batch: int = len(max(subtokenized_sentences, key=len))
 
         # Clamp to model's max position embeddings to prevent token_type_ids mismatch
-        if hasattr(self, 'tokenizer') and hasattr(self.tokenizer, 'model_max_length'):
+        max_len = 512
+        if hasattr(self, 'model') and hasattr(self.model, 'config') and hasattr(self.model.config, 'max_position_embeddings'):
+            max_len = self.model.config.max_position_embeddings
+        elif hasattr(self, 'tokenizer') and hasattr(self.tokenizer, 'model_max_length'):
             max_len = self.tokenizer.model_max_length
-            if longest_sequence_in_batch > max_len:
-                log.warning(f"Truncating subtokenized sentences from {longest_sequence_in_batch} to {max_len} tokens to fit model max length.")
-                subtokenized_sentences = [sent[:max_len] for sent in subtokenized_sentences]
-                longest_sequence_in_batch = max_len
+            
+        if longest_sequence_in_batch > max_len:
+            log.warning(f"Truncating subtokenized sentences from {longest_sequence_in_batch} to {max_len} tokens to fit model max length.")
+            subtokenized_sentences = [sent[:max_len] for sent in subtokenized_sentences]
+            longest_sequence_in_batch = max_len
 
         total_sentence_parts = sum(sentence_parts_lengths)
         # initialize batch tensors and mask

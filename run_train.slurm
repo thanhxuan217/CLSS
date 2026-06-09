@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1                           # Number of tasks
 #SBATCH --cpus-per-task=16                   # CPUs per task
 #SBATCH --gres=gpu:1                         # Number of GPUs
-#SBATCH --mem=16G                            # Memory per node
+#SBATCH --mem=32G                            # Memory per node
 #SBATCH --time=48:00:00                      # Time limit
 
 set -euo pipefail
@@ -78,13 +78,13 @@ CUDA_VISIBLE_DEVICES=0 python train.py \
 # RUN EVALUATION
 # ============================================================================
 
-echo ""
-echo "[Step 2/2] Evaluating on test set..."
-CUDA_VISIBLE_DEVICES=0 python train.py \
-    --config "${TRAIN_CONFIG}" \
-    --test \
-    --transformer_model "${TRANSFORMER_MODEL}" \
-    --out_dir "${OUT_DIR}"
+# echo ""
+# echo "[Step 2/2] Evaluating on test set..."
+# CUDA_VISIBLE_DEVICES=0 python train.py \
+#     --config "${TRAIN_CONFIG}" \
+#     --test \
+#     --transformer_model "${TRANSFORMER_MODEL}" \
+#     --out_dir "${OUT_DIR}"
 
 # ============================================================================
 # COMPLETION

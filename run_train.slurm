@@ -15,14 +15,7 @@ set -euo pipefail
 # ============================================================================
 # LOAD CONFIGURATION
 # ============================================================================
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-if [[ ! -f "${SCRIPT_DIR}/config_train.slurm" ]]; then
-    echo "ERROR: config_train.slurm not found in ${SCRIPT_DIR}"
-    exit 1
-fi
-
-source "${SCRIPT_DIR}/config_train.slurm"
+source "config_train.slurm"
 
 # Ensure directories exist
 mkdir -p "${LOG_DIR}" "${OUT_DIR}"
@@ -42,49 +35,19 @@ echo "=========================================="
 source "${CONDA_PATH}"
 conda activate "${CONDA_ENV}"
 
-echo "Python: $(which python) ($(python --version 2>&1))"
-
 # Set environment variables
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}
 
-# Print GPU info
-if command -v nvidia-smi >/dev/null 2>&1; then
-    echo ""
-    echo "GPU:"
-    nvidia-smi --query-gpu=index,name,memory.total,memory.free --format=csv,noheader
-fi
-
-echo ""
-echo "Config: ${TRAIN_CONFIG}"
-echo "Transformer: ${TRANSFORMER_MODEL}"
-echo "Output: ${OUT_DIR}"
-echo "=========================================="
-
 # ============================================================================
 # RUN TRAINING
 # ============================================================================
-
-cd "${WORKING_DIR}" || { echo "ERROR: Cannot cd to ${WORKING_DIR}"; exit 1; }
-
 echo ""
 echo "[Step 1/2] Training..."
-CUDA_VISIBLE_DEVICES=0 python train.py \
+python train.py \
     --config "${TRAIN_CONFIG}" \
     --transformer_model "${TRANSFORMER_MODEL}" \
     --out_dir "${OUT_DIR}"
-
-# ============================================================================
-# RUN EVALUATION
-# ============================================================================
-
-# echo ""
-# echo "[Step 2/2] Evaluating on test set..."
-# CUDA_VISIBLE_DEVICES=0 python train.py \
-#     --config "${TRAIN_CONFIG}" \
-#     --test \
-#     --transformer_model "${TRANSFORMER_MODEL}" \
-#     --out_dir "${OUT_DIR}"
 
 # ============================================================================
 # COMPLETION

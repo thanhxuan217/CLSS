@@ -3199,6 +3199,12 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         # put encoded batch through transformer model to get all hidden states of all encoder layers
         inputs_embeds = None
         
+        # Ensure the transformer model is on the same device as input tensors.
+        # This can happen when gpu_friendly_assign_embedding moves the model to CPU
+        # after pre-computing embeddings, but evaluate() later calls this method again.
+        if next(self.model.parameters()).device != input_ids.device:
+            self.model.to(input_ids.device)
+
         if 'xlnet' in self.name:
             xlnet_output = self.model(input_ids, attention_mask=mask, inputs_embeds = inputs_embeds)
             hidden_states = xlnet_output.hidden_states if hasattr(xlnet_output, 'hidden_states') else xlnet_output[-1]

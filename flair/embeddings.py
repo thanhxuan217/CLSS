@@ -2888,6 +2888,11 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         v2_doc: bool = False,
         ext_doc: bool = False,
         sentence_feat: bool = False,
+        use_qlora: bool = False,
+        lora_rank: int = 16,
+        lora_alpha: int = 32,
+        lora_dropout: float = 0.05,
+        lora_target_modules: List[str] = None,
         **kwargs
     ):
         """
@@ -2903,6 +2908,11 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         :param fine_tune: If True, allows transformers to be fine-tuned during training
         :param embedding_name: We recommend to set embedding_name if you use absolute path to the embedding file. If you do not set it in training, the order of embeddings is changed when you run the trained ACE model on other server.
         :param maximum_subtoken_length: The maximum length of subtokens for a token, if chunk the subtokens to the maximum length if it is longer than the maximum subtoken length.
+        :param use_qlora: If True, load model in 4-bit (NF4) and attach LoRA adapters for memory-efficient fine-tuning
+        :param lora_rank: Rank of LoRA adapters (default: 16)
+        :param lora_alpha: Alpha scaling factor for LoRA (default: 32)
+        :param lora_dropout: Dropout rate for LoRA layers (default: 0.05)
+        :param lora_target_modules: List of module names to apply LoRA to (default: ["query", "key", "value", "dense"])
         """
         super().__init__()
 
@@ -2911,16 +2921,77 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         import os
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+        # Store QLoRA config for serialization
+        self.use_qlora = use_qlora
+        self.lora_rank = lora_rank
+        self.lora_alpha = lora_alpha
+        self.lora_dropout = lora_dropout
+        self.lora_target_modules = lora_target_modules or ["query", "key", "value", "dense"]
+        self.base_model_name = model  # store for re-loading in _init_model_with_state_dict
+
         # load tokenizer and transformer model
         
         self.tokenizer = AutoTokenizer.from_pretrained(model, **kwargs)
-        config = AutoConfig.from_pretrained(model, output_hidden_states=True, **kwargs)
-        self.model = AutoModel.from_pretrained(model, config=config, **kwargs)
+
+        if use_qlora:
+            # ─── QLoRA: 4-bit quantization + LoRA adapters ───────────────────
+            try:
+                from transformers import BitsAndBytesConfig
+                from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+            except ImportError as e:
+                raise ImportError(
+                    "QLoRA requires 'peft' and 'bitsandbytes'. "
+                    "Install them with: pip install peft>=0.7.0 bitsandbytes>=0.41.0"
+                ) from e
+
+            log.info(f"[QLoRA] Loading '{model}' in 4-bit NF4 quantization...")
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+            )
+            model_config = AutoConfig.from_pretrained(model, output_hidden_states=True, **kwargs)
+            self.model = AutoModel.from_pretrained(
+                model, config=model_config, quantization_config=bnb_config, **kwargs
+            )
+
+            # Prepare for k-bit training (freeze base, enable gradient for adapters)
+            self.model = prepare_model_for_kbit_training(self.model)
+
+            # Attach LoRA adapters
+            peft_config = LoraConfig(
+                r=lora_rank,
+                lora_alpha=lora_alpha,
+                target_modules=self.lora_target_modules,
+                lora_dropout=lora_dropout,
+                bias="none",
+                task_type="FEATURE_EXTRACTION",
+            )
+            self.model = get_peft_model(self.model, peft_config)
+
+            # Log trainable parameters
+            trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            all_params = sum(p.numel() for p in self.model.parameters())
+            log.info(
+                f"[QLoRA] LoRA rank={lora_rank}, alpha={lora_alpha}, "
+                f"target_modules={self.lora_target_modules}"
+            )
+            log.info(
+                f"[QLoRA] Trainable params: {trainable_params:,} / {all_params:,} "
+                f"({100 * trainable_params / all_params:.2f}%)"
+            )
+        else:
+            # ─── Standard loading (no quantization) ──────────────────────────
+            config = AutoConfig.from_pretrained(model, output_hidden_states=True, **kwargs)
+            self.model = AutoModel.from_pretrained(model, config=config, **kwargs)
 
         self.allow_long_sentences = allow_long_sentences
-        if hasattr(self.model.config, 'max_position_embeddings'):
-            if not hasattr(self.tokenizer, 'model_max_length') or self.tokenizer.model_max_length > self.model.config.max_position_embeddings:
-                self.tokenizer.model_max_length = self.model.config.max_position_embeddings
+        # For QLoRA / peft-wrapped models, access config via base_model if needed
+        _model_config = self.model.config if hasattr(self.model, 'config') else self.model.base_model.config
+        if hasattr(_model_config, 'max_position_embeddings'):
+            if not hasattr(self.tokenizer, 'model_max_length') or self.tokenizer.model_max_length > _model_config.max_position_embeddings:
+                self.tokenizer.model_max_length = _model_config.max_position_embeddings
         if not hasattr(self.tokenizer,'model_max_length') or self.tokenizer.model_max_length > 100000:
             self.tokenizer.model_max_length = 512
         if allow_long_sentences:
@@ -2943,12 +3014,16 @@ class TransformerWordEmbeddings(TokenEmbeddings):
 
         # when initializing, embeddings are in eval mode by default
         self.model.eval()
-        self.model.to(flair.device)
+        # For QLoRA, bitsandbytes handles device placement during from_pretrained;
+        # only move to device explicitly for non-quantized models.
+        if not use_qlora:
+            self.model.to(flair.device)
 
         # embedding parameters
         if layers == 'all':
             # send mini-token through to check how many layers the model has
-            hidden_states = self.model(torch.tensor([1], device=flair.device).unsqueeze(0))[-1]
+            _device = next(self.model.parameters()).device
+            hidden_states = self.model(torch.tensor([1], device=_device).unsqueeze(0))[-1]
             self.layer_indexes = [int(x) for x in range(len(hidden_states))]
         else:
             self.layer_indexes = [int(x) for x in layers.split(",")]
@@ -2984,6 +3059,65 @@ class TransformerWordEmbeddings(TokenEmbeddings):
             self.begin_offset = 0
         self.maximum_subtoken_length = maximum_subtoken_length
 
+
+    def __getstate__(self):
+        """Custom pickle serialization for QLoRA models.
+        
+        For QLoRA models, we save only the LoRA adapter state_dict + the base model name
+        instead of the full quantized model, which cannot be reliably pickled.
+        For non-QLoRA models, default pickling behavior is used.
+        """
+        state = self.__dict__.copy()
+        if getattr(self, 'use_qlora', False):
+            # Save only LoRA adapter weights (not the full quantized model)
+            from peft import get_peft_model_state_dict
+            state['_qlora_adapter_state'] = get_peft_model_state_dict(self.model)
+            # Remove the unpicklable quantized model; will be re-created on load
+            del state['model']
+        return state
+
+    def __setstate__(self, state):
+        """Custom pickle deserialization for QLoRA models.
+        
+        Re-creates the quantized model from base_model_name and loads LoRA adapter weights.
+        """
+        if '_qlora_adapter_state' in state:
+            adapter_state = state.pop('_qlora_adapter_state')
+            self.__dict__.update(state)
+            
+            # Re-create quantized model + LoRA from base model name
+            from transformers import BitsAndBytesConfig
+            from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, set_peft_model_state_dict
+
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+            )
+            model_config = AutoConfig.from_pretrained(
+                self.base_model_name, output_hidden_states=True
+            )
+            self.model = AutoModel.from_pretrained(
+                self.base_model_name, config=model_config, quantization_config=bnb_config
+            )
+            self.model = prepare_model_for_kbit_training(self.model)
+
+            peft_config = LoraConfig(
+                r=self.lora_rank,
+                lora_alpha=self.lora_alpha,
+                target_modules=self.lora_target_modules,
+                lora_dropout=self.lora_dropout,
+                bias="none",
+                task_type="FEATURE_EXTRACTION",
+            )
+            self.model = get_peft_model(self.model, peft_config)
+
+            # Load saved LoRA adapter weights
+            set_peft_model_state_dict(self.model, adapter_state)
+            log.info(f"[QLoRA] Restored LoRA adapters from checkpoint for '{self.base_model_name}'")
+        else:
+            self.__dict__.update(state)
 
     def _add_embeddings_internal(self, sentences: List[Sentence]) -> List[Sentence]:
         """Add embeddings to all words in a list of sentences."""
@@ -3182,15 +3316,17 @@ class TransformerWordEmbeddings(TokenEmbeddings):
 
         total_sentence_parts = sum(sentence_parts_lengths)
         # initialize batch tensors and mask
+        # For QLoRA: inputs must be on the same device as the quantized model
+        _input_device = next(self.model.parameters()).device if getattr(self, 'use_qlora', False) else flair.device
         input_ids = torch.zeros(
             [total_sentence_parts, longest_sequence_in_batch],
             dtype=torch.long,
-            device=flair.device,
+            device=_input_device,
         )
         mask = torch.zeros(
             [total_sentence_parts, longest_sequence_in_batch],
             dtype=torch.long,
-            device=flair.device,
+            device=_input_device,
         )
         for s_id, sentence in enumerate(subtokenized_sentences):
             sequence_length = len(sentence)
@@ -3202,8 +3338,15 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         # Ensure the transformer model is on the same device as input tensors.
         # This can happen when gpu_friendly_assign_embedding moves the model to CPU
         # after pre-computing embeddings, but evaluate() later calls this method again.
-        if next(self.model.parameters()).device != input_ids.device:
-            self.model.to(input_ids.device)
+        # Note: quantized (QLoRA) models cannot be moved with .to(); move inputs instead.
+        if getattr(self, 'use_qlora', False):
+            model_device = next(self.model.parameters()).device
+            if input_ids.device != model_device:
+                input_ids = input_ids.to(model_device)
+                mask = mask.to(model_device)
+        else:
+            if next(self.model.parameters()).device != input_ids.device:
+                self.model.to(input_ids.device)
 
         if 'xlnet' in self.name:
             xlnet_output = self.model(input_ids, attention_mask=mask, inputs_embeds = inputs_embeds)

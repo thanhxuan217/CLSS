@@ -15,7 +15,8 @@ export CONDA_ENV="/media02/ddien02/thanhxuan217/envs/sikubert"
 # TRAINING CONFIG
 # ============================================================================
 # YAML config file (relative to WORKING_DIR) — mọi hyperparameters nằm trong đây
-export TRAIN_CONFIG="config/sino_nom_doc_cl.yaml"
+# Đổi thành "config/sino_nom_doc_cl.yaml" nếu muốn train full fine-tune (không QLoRA)
+export TRAIN_CONFIG="config/sino_nom_doc_cl_qlora.yaml"
 
 # Override transformer model path (local directory hoặc HuggingFace name)
 # Nếu server offline: đổi thành đường dẫn local, ví dụ "${WORKING_DIR}/models/sikubert"

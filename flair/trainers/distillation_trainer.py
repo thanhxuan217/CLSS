@@ -1136,6 +1136,11 @@ class ModelDistiller(ModelTrainer):
 			
 			if ('WordEmbeddings' != embedding.__class__.__name__ and 'FastWordEmbeddings' != embedding.__class__.__name__ and 'Char' not in embedding.__class__.__name__ and 'Lemma' not in embedding.__class__.__name__ and 'POS' not in embedding.__class__.__name__) and not (hasattr(embedding,'fine_tune') and embedding.fine_tune):
 
+				# Skip gpu_friendly optimization for QLoRA models (cannot be moved between devices)
+				if hasattr(embedding, 'use_qlora') and embedding.use_qlora:
+					log.info(f"{embedding.name} uses QLoRA — skipping gpu_friendly device movement")
+					continue
+
 				log.info(f"{embedding.name} {count_parameters(embedding)}")
 				# 
 				if embedding.__class__.__name__ == 'TransformerWordEmbeddings':

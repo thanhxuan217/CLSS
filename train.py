@@ -56,6 +56,7 @@ parser.add_argument('--batch_size', default=-1, help='manually setting the mini 
 parser.add_argument('--keep_embedding', default=-1, help='mask out all embeddings except the index, for analysis')
 parser.add_argument('--transformer_model', default=None, help='override the transformer model path (local directory or HuggingFace name) for all TransformerWordEmbeddings in config')
 parser.add_argument('--out_dir', default=None, help='output directory: lưu kết quả training (checkpoints, log) hoặc load model khi --test')
+parser.add_argument('--qlora', action='store_true', help='enable QLoRA (4-bit quantization + LoRA adapters) for all TransformerWordEmbeddings')
 
 def count_parameters(model):
 	import numpy as np
@@ -87,6 +88,14 @@ if args.transformer_model is not None:
 			if 'TransformerWordEmbeddings' in emb_key and isinstance(config['embeddings'][emb_key], dict):
 				config['embeddings'][emb_key]['model'] = args.transformer_model
 				log.info(f"[CLI override] Embedding '{emb_key}' model set to: {args.transformer_model}")
+
+# Override QLoRA from CLI
+if args.qlora:
+	if 'embeddings' in config:
+		for emb_key in config['embeddings']:
+			if 'TransformerWordEmbeddings' in emb_key and isinstance(config['embeddings'][emb_key], dict):
+				config['embeddings'][emb_key]['use_qlora'] = True
+				log.info(f"[CLI override] QLoRA enabled for embedding '{emb_key}'")
 
 
 config = ConfigParser(config,all=args.all,zero_shot=args.zeroshot,other_shot=args.other,predict=args.predict)

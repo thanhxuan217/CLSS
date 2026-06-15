@@ -300,10 +300,21 @@ class ModelFinetuner(ModelDistiller):
 		
 		self.use_bert = False
 		self.bert_tokenizer = None
+		self.use_qlora = False
 		for embedding in self.model.embeddings.embeddings:
 			if 'bert' in embedding.__class__.__name__.lower():
 				self.use_bert=True
 				self.bert_tokenizer = embedding.tokenizer
+			# Detect QLoRA and enable gradient checkpointing for VRAM savings
+			if hasattr(embedding, 'use_qlora') and embedding.use_qlora:
+				self.use_qlora = True
+				if hasattr(embedding.model, 'gradient_checkpointing_enable'):
+					embedding.model.gradient_checkpointing_enable()
+					log.info("[QLoRA] Gradient checkpointing enabled for memory-efficient training")
+				# Log trainable vs total params
+				trainable = sum(p.numel() for p in embedding.model.parameters() if p.requires_grad)
+				total = sum(p.numel() for p in embedding.model.parameters())
+				log.info(f"[QLoRA] Embedding '{embedding.name}': {trainable:,} trainable / {total:,} total params ({100*trainable/total:.2f}%)")
 		self.ensemble_distill_mode: bool = ensemble_distill_mode
 		self.train_with_professor: bool = train_with_professor
 		# if self.train_with_professor:

@@ -19,6 +19,7 @@ datasketch>=1.6.0
 # ── QLoRA (LoRA + 4-bit quantization) ─────────────────────────────────────────
 peft>=0.7.0
 bitsandbytes>=0.45.0
+nvidia-nvjitlink-cu12  # Fixes libnvJitLink.so.13 not found error
 
 # ── NLP Utilities ──────────────────────────────────────────────────────────────
 tokenizers>=0.13.0

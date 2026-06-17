@@ -2941,7 +2941,7 @@ class TransformerWordEmbeddings(TokenEmbeddings):
             except ImportError as e:
                 raise ImportError(
                     "QLoRA requires 'peft' and 'bitsandbytes'. "
-                    "Install them with: pip install peft>=0.7.0 bitsandbytes>=0.41.0"
+                    "Install them with: pip install peft>=0.7.0 bitsandbytes>=0.46.1"
                 ) from e
 
             log.info(f"[QLoRA] Loading '{model}' in 4-bit NF4 quantization...")

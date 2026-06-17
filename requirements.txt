@@ -5,20 +5,21 @@
 # Added: datasketch (MinHash LSH RAG)
 
 --extra-index-url https://download.pytorch.org/whl/cu124
-torch>=2.0.0
+torch>=2.0.0,!=2.0.1,!=2.1.0
 torchvision>=0.15.0
 torchaudio>=2.0.0
 transformers>=4.30.0
-numpy>=1.24.0
-scipy>=1.10.0
-scikit-learn>=1.2.0
+numpy<2.2.0,>=1.24.0
+scipy<1.17.0,>=1.10.0
+scikit-learn<1.9.0,>=1.2.0
 
 # ── MinHash RAG (new) ──────────────────────────────────────────────────────────
 datasketch>=1.6.0
 
 # ── QLoRA (LoRA + 4-bit quantization) ─────────────────────────────────────────
 peft>=0.7.0
-bitsandbytes>=0.46.1
+bitsandbytes==0.48.0
+nvidia-nvjitlink-cu12
 
 # ── NLP Utilities ──────────────────────────────────────────────────────────────
 tokenizers>=0.13.0
@@ -38,7 +39,7 @@ bpemb>=0.3.4
 h5py>=3.8.0
 PyYAML>=6.0
 tabulate>=0.9.0
-pandas>=1.5.0
+pandas==2.2.2
 tqdm>=4.65.0
 boto3>=1.26.0
 

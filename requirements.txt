@@ -20,6 +20,7 @@ datasketch>=1.6.0
 peft>=0.7.0
 bitsandbytes==0.48.0
 nvidia-nvjitlink-cu12
+nvidia-nvjitlink-cu13
 
 # ── NLP Utilities ──────────────────────────────────────────────────────────────
 tokenizers>=0.13.0

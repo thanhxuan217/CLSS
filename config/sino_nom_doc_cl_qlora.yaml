@@ -68,7 +68,7 @@ punct:
 
 # ─── Training ─────────────────────────────────────────────────────────────────
 train:
-  fine_tune_mode: false
+  fine_tune_mode: true
   patience: 3
   embeddings_storage_mode: none
 

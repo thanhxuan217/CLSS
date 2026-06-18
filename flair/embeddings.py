@@ -3350,14 +3350,39 @@ class TransformerWordEmbeddings(TokenEmbeddings):
 
         if 'xlnet' in self.name:
             xlnet_output = self.model(input_ids, attention_mask=mask, inputs_embeds = inputs_embeds)
-            hidden_states = xlnet_output.hidden_states if hasattr(xlnet_output, 'hidden_states') else xlnet_output[-1]
+            hidden_states = xlnet_output.hidden_states if (hasattr(xlnet_output, 'hidden_states') and xlnet_output.hidden_states is not None) else xlnet_output[-1]
             if self.sentence_feat:
                 assert 0, 'not implemented'
         else:
             model_output = self.model(input_ids, attention_mask=mask, inputs_embeds = inputs_embeds)
-            if hasattr(model_output, 'hidden_states'):
+            if hasattr(model_output, 'hidden_states') and model_output.hidden_states is not None:
                 hidden_states = model_output.hidden_states
-                pooled_output = model_output.pooler_output
+                pooled_output = model_output.pooler_output if hasattr(model_output, 'pooler_output') else None
+            elif hasattr(model_output, 'last_hidden_state'):
+                # PEFT-wrapped models may not return hidden_states even with output_hidden_states=True.
+                # Re-run through the base model or reconstruct from last_hidden_state as fallback.
+                # First, try to enable output_hidden_states on the underlying config.
+                _cfg = self.model.config if hasattr(self.model, 'config') else None
+                if _cfg is not None and not getattr(_cfg, 'output_hidden_states', False):
+                    _cfg.output_hidden_states = True
+                    log.warning("[TransformerWordEmbeddings] output_hidden_states was disabled on config; re-enabled it.")
+                    # Re-run the forward pass with the corrected config
+                    model_output = self.model(input_ids, attention_mask=mask, inputs_embeds=inputs_embeds)
+                    if hasattr(model_output, 'hidden_states') and model_output.hidden_states is not None:
+                        hidden_states = model_output.hidden_states
+                        pooled_output = model_output.pooler_output if hasattr(model_output, 'pooler_output') else None
+                    else:
+                        raise RuntimeError(
+                            "TransformerWordEmbeddings: model still does not return hidden_states "
+                            "after enabling output_hidden_states=True on config. "
+                            "Please check the model configuration."
+                        )
+                else:
+                    raise RuntimeError(
+                        "TransformerWordEmbeddings: model output has 'last_hidden_state' but "
+                        "'hidden_states' is None despite output_hidden_states=True in config. "
+                        "This may indicate a PEFT wrapper issue."
+                    )
             else:
                 sequence_output, pooled_output, hidden_states = model_output
             if self.sentence_feat:
@@ -3681,7 +3706,7 @@ class TransformerWordEmbeddings(TokenEmbeddings):
             doc_hidden_states = torch.zeros([len(doc_subtokens),self.embedding_length])
             for i in range(len(doc_input_ids)):
                 _model_out = self.model(doc_input_ids[i], attention_mask=doc_input_masks[i])
-                _hs = _model_out.hidden_states if hasattr(_model_out, 'hidden_states') else _model_out[-1]
+                _hs = _model_out.hidden_states if (hasattr(_model_out, 'hidden_states') and _model_out.hidden_states is not None) else _model_out[-1]
                 hidden_states=torch.stack(_hs)[self.layer_indexes]
                 hidden_states = hidden_states.permute([1,2,3,0])
                 # reshape to batch x subtokens x hidden_size*layers

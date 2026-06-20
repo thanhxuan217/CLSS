@@ -3355,34 +3355,62 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 assert 0, 'not implemented'
         else:
             model_output = self.model(input_ids, attention_mask=mask, inputs_embeds = inputs_embeds)
+            hidden_states = None
+            pooled_output = None
             if hasattr(model_output, 'hidden_states') and model_output.hidden_states is not None:
                 hidden_states = model_output.hidden_states
                 pooled_output = model_output.pooler_output if hasattr(model_output, 'pooler_output') else None
             elif hasattr(model_output, 'last_hidden_state'):
-                # PEFT-wrapped models may not return hidden_states even with output_hidden_states=True.
-                # Re-run through the base model or reconstruct from last_hidden_state as fallback.
-                # First, try to enable output_hidden_states on the underlying config.
+                # PEFT-wrapped models may not return hidden_states even with output_hidden_states=True in config.
+                # Strategy 1: Ensure output_hidden_states is True on config and retry forward.
                 _cfg = self.model.config if hasattr(self.model, 'config') else None
                 if _cfg is not None and not getattr(_cfg, 'output_hidden_states', False):
                     _cfg.output_hidden_states = True
                     log.warning("[TransformerWordEmbeddings] output_hidden_states was disabled on config; re-enabled it.")
-                    # Re-run the forward pass with the corrected config
                     model_output = self.model(input_ids, attention_mask=mask, inputs_embeds=inputs_embeds)
                     if hasattr(model_output, 'hidden_states') and model_output.hidden_states is not None:
                         hidden_states = model_output.hidden_states
                         pooled_output = model_output.pooler_output if hasattr(model_output, 'pooler_output') else None
-                    else:
-                        raise RuntimeError(
-                            "TransformerWordEmbeddings: model still does not return hidden_states "
-                            "after enabling output_hidden_states=True on config. "
-                            "Please check the model configuration."
-                        )
-                else:
-                    raise RuntimeError(
-                        "TransformerWordEmbeddings: model output has 'last_hidden_state' but "
-                        "'hidden_states' is None despite output_hidden_states=True in config. "
-                        "This may indicate a PEFT wrapper issue."
+
+                # Strategy 2: Pass output_hidden_states=True as a forward kwarg (some PEFT versions respect this).
+                if hidden_states is None:
+                    try:
+                        model_output = self.model(input_ids, attention_mask=mask, inputs_embeds=inputs_embeds, output_hidden_states=True)
+                        if hasattr(model_output, 'hidden_states') and model_output.hidden_states is not None:
+                            hidden_states = model_output.hidden_states
+                            pooled_output = model_output.pooler_output if hasattr(model_output, 'pooler_output') else None
+                    except TypeError:
+                        pass  # model.forward() doesn't accept output_hidden_states kwarg
+
+                # Strategy 3: Call the underlying base model directly (bypassing PEFT wrapper).
+                if hidden_states is None:
+                    _base = None
+                    if hasattr(self.model, 'base_model') and hasattr(self.model.base_model, 'model'):
+                        _base = self.model.base_model.model  # PeftModel -> base_model -> actual HF model
+                    elif hasattr(self.model, 'base_model'):
+                        _base = self.model.base_model
+                    if _base is not None:
+                        # Ensure base model config has output_hidden_states=True
+                        if hasattr(_base, 'config'):
+                            _base.config.output_hidden_states = True
+                        try:
+                            base_output = _base(input_ids, attention_mask=mask, inputs_embeds=inputs_embeds)
+                            if hasattr(base_output, 'hidden_states') and base_output.hidden_states is not None:
+                                hidden_states = base_output.hidden_states
+                                pooled_output = base_output.pooler_output if hasattr(base_output, 'pooler_output') else None
+                                log.info("[TransformerWordEmbeddings] Retrieved hidden_states by calling base_model directly.")
+                        except Exception as e:
+                            log.warning(f"[TransformerWordEmbeddings] base_model call failed: {e}")
+
+                # Strategy 4: Use last_hidden_state as a single-layer fallback.
+                if hidden_states is None:
+                    log.warning(
+                        "[TransformerWordEmbeddings] Could not retrieve hidden_states from PEFT model. "
+                        "Falling back to last_hidden_state as single layer."
                     )
+                    # Wrap as a tuple of one layer to match the expected format (num_layers, batch, seq, hidden)
+                    hidden_states = (model_output.last_hidden_state,)
+                    pooled_output = model_output.pooler_output if hasattr(model_output, 'pooler_output') else None
             else:
                 sequence_output, pooled_output, hidden_states = model_output
             if self.sentence_feat:

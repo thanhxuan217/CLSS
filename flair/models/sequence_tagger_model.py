@@ -1982,6 +1982,9 @@ class FastSequenceTagger(SequenceTagger):
 		# selected_mask = mask.masked_select().view((mask_tags.sum(-1)>0).sum(),-1)
 		masked_lengths = selected_mask.sum(-1).long()
 		selected_features = features[torch.where(mask_tags.sum(-1)>0)]
+		# Guard: if no sentences matched multi-view criteria, return 0
+		if selected_features.shape[0] == 0 or masked_lengths.numel() == 0:
+			return 0
 		masked_features = torch.zeros([selected_features.shape[0],masked_lengths.max(),selected_features.shape[-1]]).type_as(selected_features)
 		select_mask = selected_mask.bool()
 		temp_mask = torch.ones(selected_features.shape).type_as(selected_features).bool() * select_mask.unsqueeze(-1).bool()

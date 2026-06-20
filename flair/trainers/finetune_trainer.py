@@ -1035,7 +1035,7 @@ class ModelFinetuner(ModelDistiller):
 						orig_sentences = [sentence.orig_sent for idx, sentence in enumerate(student_input) if hasattr(sentence,'orig_sent') ]
 						if len(orig_sentences)>0:
 							store_embeddings(orig_sentences, embeddings_storage_mode)
-						if embeddings_storage_mode == 'none' and multi_view_training:
+						if embeddings_storage_mode == 'none' and multi_view_training and hasattr(student_input, 'orig_sentences'):
 							student_input.orig_sentences.features = {}
 					if self.use_unlabeled_data:
 						store_embeddings(unlabeled_input, embeddings_storage_mode)

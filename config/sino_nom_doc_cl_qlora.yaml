@@ -34,14 +34,13 @@ embeddings:
     pooling_operation: first
     # === QLoRA settings ===
     use_qlora: true
-    lora_rank: 16
-    lora_alpha: 32
+    lora_rank: 8
+    lora_alpha: 16
     lora_dropout: 0.05
     lora_target_modules:
       - query
       - key
       - value
-      - dense
 
 # ─── Dataset ──────────────────────────────────────────────────────────────────
 targets: punct
@@ -69,17 +68,17 @@ punct:
 # ─── Training ─────────────────────────────────────────────────────────────────
 train:
   fine_tune_mode: true
-  patience: 3
+  patience: 2
   embeddings_storage_mode: none
 
   learning_rate: 5.0e-5
   lr_rate: 10000
   use_warmup: true
 
-  mini_batch_size: 16
-  gradient_accumulation_steps: 1
+  mini_batch_size: 32
+  gradient_accumulation_steps: 2
 
-  max_epochs: 5
+  max_epochs: 3
 
   monitor_test: true
   train_with_dev: true
@@ -96,7 +95,7 @@ interpolation: 0.5
 
 # ─── Output ───────────────────────────────────────────────────────────────────
 target_dir: resources/taggers/
-model_name: sikubert_qlora_r16_5epoch_16batch_5e-5lr_sino_nom_punct_crf_multiview_posterior_minhash_rag
+model_name: sikubert_qlora_r8_3epoch_32batch_5e-5lr_sino_nom_punct_crf_multiview_posterior_minhash_rag
 
 # ─── MFVI (tắt mặc định) ─────────────────────────────────────────────────────
 MFVI:

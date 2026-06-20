@@ -986,10 +986,9 @@ class ModelFinetuner(ModelDistiller):
 									loss.backward()
 					except Exception:
 						traceback.print_exc()
-						log.info(f"{[len(x) for x in student_input]}")
-						log.info(f"{student_input}")
+						log.info(f"batch_no={batch_no}, sent_lengths={[len(x) for x in student_input]}")
 						if self.use_unlabeled_data:
-							log.info(f"{unlabeled_input}")
+							log.info(f"unlabeled_lengths={[len(x) for x in unlabeled_input]}")
 					# print(self.model.linear.weight.sum())
 					if loss != 0:
 						train_loss += loss.item()
@@ -1018,17 +1017,10 @@ class ModelFinetuner(ModelDistiller):
 
 					
 					if batch_no % modulo == 0:
-						if self.model.use_decoder_timer:
-							log.info(
-								f"epoch {epoch + 1} - iter {batch_no}/{total_number_of_batches} - loss "
-								f"{train_loss / (seen_batches) * gradient_accumulation_steps:.8f} - samples/sec: {total_sent / batch_time:.2f} - decode_sents/sec: {total_sent / decode_time:.2f}"
-							)
-							
-						else:
-							log.info(
-								f"epoch {epoch + 1} - iter {batch_no}/{total_number_of_batches} - loss "
-								f"{train_loss / seen_batches* gradient_accumulation_steps:.8f} - samples/sec: {total_sent / batch_time:.2f}"
-							)
+						current_loss = train_loss / seen_batches * gradient_accumulation_steps
+						log.info(
+							f"epoch {epoch + 1} - iter {batch_no}/{total_number_of_batches} - loss {current_loss:.6f} - sents/sec: {total_sent / batch_time:.1f}"
+						)
 						total_sent=0
 						batch_time = 0
 						iteration = epoch * total_number_of_batches + batch_no

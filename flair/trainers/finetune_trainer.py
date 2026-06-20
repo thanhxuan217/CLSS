@@ -963,7 +963,8 @@ class ModelFinetuner(ModelDistiller):
 								with amp.scale_loss(loss, optimizer) as scaled_loss:
 									scaled_loss.backward()
 							else:
-								loss.backward()
+								if loss != 0:
+									loss.backward()
 						if self.use_unlabeled_data:
 							with caster:
 								unlabeled_input = unlabeled_loader[random.randint(0,len(unlabeled_loader)-1)]

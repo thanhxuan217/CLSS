@@ -78,7 +78,7 @@ train:
   mini_batch_size: 32
   gradient_accumulation_steps: 2
 
-  max_epochs: 3
+  max_epochs: 2
 
   monitor_test: true
   train_with_dev: true
@@ -95,7 +95,7 @@ interpolation: 0.5
 
 # ─── Output ───────────────────────────────────────────────────────────────────
 target_dir: resources/taggers/
-model_name: sikubert_qlora_r8_3epoch_32batch_5e-5lr_sino_nom_punct_crf_multiview_posterior_minhash_rag
+model_name: sikubert_qlora_r8_2epoch_32batch_5e-5lr_sino_nom_punct_crf_multiview_posterior_minhash_rag
 
 # ─── MFVI (tắt mặc định) ─────────────────────────────────────────────────────
 MFVI:

@@ -542,7 +542,7 @@ class ModelFinetuner(ModelDistiller):
 			if (not param_selection_mode and self.corpus.test and monitor_test)
 			else False
 		)
-		log_dev = True  # Always evaluate on dev set after each epoch
+		log_dev = False if train_with_dev else True
 
 		# prepare loss logging file and set up header
 		loss_txt = init_output_file(base_path, "loss.tsv")

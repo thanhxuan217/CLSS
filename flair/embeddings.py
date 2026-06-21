@@ -2950,6 +2950,7 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch.float16,
                 bnb_4bit_use_double_quant=True,
+                llm_int8_skip_modules=["pooler"],
             )
             model_config = AutoConfig.from_pretrained(model, output_hidden_states=True, **kwargs)
             self.model = AutoModel.from_pretrained(
@@ -3110,6 +3111,7 @@ class TransformerWordEmbeddings(TokenEmbeddings):
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch.float16,
                 bnb_4bit_use_double_quant=True,
+                llm_int8_skip_modules=["pooler"],
             )
             model_config = AutoConfig.from_pretrained(
                 self.base_model_name, output_hidden_states=True

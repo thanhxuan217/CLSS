@@ -2990,8 +2990,24 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         # For QLoRA / peft-wrapped models, access config via base_model if needed
         _model_config = self.model.config if hasattr(self.model, 'config') else self.model.base_model.config
         if hasattr(_model_config, 'max_position_embeddings'):
-            if not hasattr(self.tokenizer, 'model_max_length') or self.tokenizer.model_max_length > _model_config.max_position_embeddings:
-                self.tokenizer.model_max_length = _model_config.max_position_embeddings
+            # RoBERTa-based models (e.g. GuwenBERT, SikuRoBERTa) use a position offset
+            # (typically 2), so max_position_embeddings=514 means max sequence length=512.
+            # BERT-based models (e.g. SikuBERT) have no offset, so 512 means 512.
+            _max_pos = _model_config.max_position_embeddings
+            _pad_idx = getattr(_model_config, 'pad_token_id', None)
+            # Detect RoBERTa-style offset: position_embedding has padding_idx=pad_token_id
+            # and pad_token_id >= 1, which means positions 0..pad_token_id are reserved.
+            # The typical RoBERTa offset is 2 (pad_token_id=1), giving 514 - 2 = 512.
+            _pos_offset = 0
+            if _pad_idx is not None and _pad_idx >= 1:
+                # Check if this is a RoBERTa-style model with position offset
+                _pos_offset = getattr(_model_config, 'position_embedding_offset', _pad_idx + 1)
+                # Only apply offset if max_position_embeddings > 512 (indicates offset is baked in)
+                if _max_pos <= 512:
+                    _pos_offset = 0
+            _effective_max_length = _max_pos - _pos_offset
+            if not hasattr(self.tokenizer, 'model_max_length') or self.tokenizer.model_max_length > _effective_max_length:
+                self.tokenizer.model_max_length = _effective_max_length
         if not hasattr(self.tokenizer,'model_max_length') or self.tokenizer.model_max_length > 100000:
             self.tokenizer.model_max_length = 512
         if allow_long_sentences:
@@ -3302,12 +3318,10 @@ class TransformerWordEmbeddings(TokenEmbeddings):
         # find longest sentence in batch
         longest_sequence_in_batch: int = len(max(subtokenized_sentences, key=len))
 
-        # Clamp to model's max position embeddings to prevent token_type_ids mismatch
-        max_len = 512
-        if hasattr(self, 'model') and hasattr(self.model, 'config') and hasattr(self.model.config, 'max_position_embeddings'):
-            max_len = self.model.config.max_position_embeddings
-        elif hasattr(self, 'tokenizer') and hasattr(self.tokenizer, 'model_max_length'):
-            max_len = self.tokenizer.model_max_length
+        # Clamp to tokenizer's model_max_length (already accounts for position offset)
+        max_len = getattr(self.tokenizer, 'model_max_length', 512)
+        if max_len > 100000:
+            max_len = 512
             
         if longest_sequence_in_batch > max_len:
             log.warning(f"Truncating subtokenized sentences from {longest_sequence_in_batch} to {max_len} tokens to fit model max length.")

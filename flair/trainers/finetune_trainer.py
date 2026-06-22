@@ -1219,15 +1219,6 @@ class ModelFinetuner(ModelDistiller):
 						print(self.language_weight.softmax(1))
 				# if checkpoint is enable, save model at each epoch
 				if checkpoint and not param_selection_mode:
-					# if self.n_gpu>1:
-					# 	self.model.module.save_checkpoint(
-					# 		base_path / "checkpoint.pt",
-					# 		optimizer.state_dict(),
-					# 		scheduler.state_dict(),
-					# 		epoch + 1,
-					# 		train_loss,
-					# 	)
-					# else:
 					self.model.save_checkpoint(
 						base_path / "checkpoint.pt",
 						optimizer.state_dict(),
@@ -1235,6 +1226,14 @@ class ModelFinetuner(ModelDistiller):
 						epoch + 1,
 						train_loss,
 					)
+					if hasattr(self.model, 'embeddings') and hasattr(self.model.embeddings, 'embeddings'):
+						for embedding in self.model.embeddings.embeddings:
+							if getattr(embedding, 'use_qlora', False):
+								checkpoint_dir = base_path / f"checkpoint_qlora_{embedding.name.split('/')[-1]}"
+								if not os.path.exists(checkpoint_dir):
+									os.makedirs(checkpoint_dir, exist_ok=True)
+								embedding.tokenizer.save_pretrained(checkpoint_dir)
+								embedding.model.save_pretrained(checkpoint_dir)
 
 				# save best model based on dev evaluation score
 				if (

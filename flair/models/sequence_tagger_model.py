@@ -429,8 +429,23 @@ class SequenceTagger(flair.nn.Model):
 
 
 	def _get_state_dict(self):
+		state_dict = self.state_dict()
+		# Filter out QLoRA weights from state_dict since they are handled by embeddings __getstate__
+		keys_to_remove = []
+		if hasattr(self, 'embeddings') and hasattr(self.embeddings, 'embeddings'):
+			for idx, emb in enumerate(self.embeddings.embeddings):
+				if getattr(emb, 'use_qlora', False):
+					prefix = f"embeddings.embeddings.{idx}."
+					keys_to_remove.extend([k for k in state_dict.keys() if k.startswith(prefix)])
+		elif hasattr(self, 'embeddings'):
+			if getattr(self.embeddings, 'use_qlora', False):
+				keys_to_remove.extend([k for k in state_dict.keys() if k.startswith("embeddings.")])
+		
+		for k in keys_to_remove:
+			del state_dict[k]
+
 		model_state = {
-			"state_dict": self.state_dict(),
+			"state_dict": state_dict,
 			"embeddings": self.embeddings,
 			"hidden_size": self.hidden_size,
 			"train_initial_hidden_state": self.train_initial_hidden_state,
@@ -1881,7 +1896,7 @@ class FastSequenceTagger(SequenceTagger):
 			calculate_l2_loss = False if "calculate_l2_loss" not in state else state["calculate_l2_loss"],
 			l2_loss_only = False if "l2_loss_only" not in state else state["l2_loss_only"],
 		)
-		model.load_state_dict(state["state_dict"])
+		model.load_state_dict(state["state_dict"], strict=False)
 		return model
 
 	def forward_loss(

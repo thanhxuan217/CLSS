@@ -52,6 +52,7 @@ punct:
       0: text
       1: punct
     data_folder: /media02/ddien02/thanhxuan217/main_src/data/sino_nom_punct
+    in_memory: false
 
   # View 2: Corpus doc (đã có MinHash RAG context)
   ColumnCorpus-SinoNomPunctDoc:
@@ -59,6 +60,7 @@ punct:
       0: text
       1: punct
     data_folder: /media02/ddien02/thanhxuan217/main_src/data/sino_nom_punct_doc
+    in_memory: false
 
   # Kết hợp 2 corpus cho multi-view training
   Corpus: ColumnCorpus-SinoNomPunct:ColumnCorpus-SinoNomPunctDoc

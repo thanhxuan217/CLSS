@@ -1203,7 +1203,7 @@ class SequenceTagger(flair.nn.Model):
 			if self.use_crf and not self.predict_posterior:
 				if self.remove_x:
 					current_mask = self.mask[i].bool().unsqueeze(-1) * torch.ones_like(feats).bool()
-					current_feat = feats.masked_select(current_mask).view(self.mask[i].sum().long(),-1)
+					current_feat = feats.masked_select(current_mask).view(self.mask[i].sum().long(), feats.size(-1))
 					confidences, tag_seq, scores = self._viterbi_decode(current_feat, all_scores=get_all_tags, current_idx = i,)
 					if len(tag_seq) < length:
 						x_before_seq = torch.where(self.mask[i]>0)[0][0].item()

@@ -75,8 +75,8 @@ train:
   lr_rate: 10000
   use_warmup: true
 
-  mini_batch_size: 32
-  gradient_accumulation_steps: 2
+  mini_batch_size: 64
+  gradient_accumulation_steps: 1
 
   max_epochs: 2
 
@@ -84,6 +84,7 @@ train:
   train_with_dev: true
   true_reshuffle: false
   save_final_model: true
+  use_autocast: true
 
 # ─── Trainer ──────────────────────────────────────────────────────────────────
 trainer: ModelFinetuner

@@ -1200,6 +1200,11 @@ class SequenceTagger(flair.nn.Model):
 		for i, vals in enumerate(zip(feature, lengths)):
 			feats, length=vals
 
+			if length == 0:
+				tags.append([])
+				all_tags.append([])
+				continue
+
 			if self.use_crf and not self.predict_posterior:
 				if self.remove_x:
 					current_mask = self.mask[i].bool().unsqueeze(-1) * torch.ones_like(feats).bool()

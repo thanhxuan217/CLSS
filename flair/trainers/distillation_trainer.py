@@ -1182,6 +1182,8 @@ class ModelDistiller(ModelTrainer):
 						for tag_id, tag in enumerate(gold_tags):
 							if tag != 'S-X':
 								gold_span.append(tag_id)
+						if not gold_span:
+							continue
 						# sentence=sentence[gold_span[0]:gold_span[-1]+1]
 						sentence.chunk_sentence(gold_span[0],gold_span[-1]+1)
 				loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)

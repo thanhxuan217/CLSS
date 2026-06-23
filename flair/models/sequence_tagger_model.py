@@ -1208,15 +1208,22 @@ class SequenceTagger(flair.nn.Model):
 			if self.use_crf and not self.predict_posterior:
 				if self.remove_x:
 					current_mask = self.mask[i].bool().unsqueeze(-1) * torch.ones_like(feats).bool()
-					current_feat = feats.masked_select(current_mask).view(self.mask[i].sum().long(), feats.size(-1))
-					confidences, tag_seq, scores = self._viterbi_decode(current_feat, all_scores=get_all_tags, current_idx = i,)
-					if len(tag_seq) < length:
-						x_before_seq = torch.where(self.mask[i]>0)[0][0].item()
-						confidences = [1]*x_before_seq + confidences
-						tag_seq = [self.tag_dictionary.item2idx[b'S-X']]*x_before_seq + tag_seq
-						x_after_seq = length - len(tag_seq)
-						confidences = confidences + [1]*x_after_seq 
-						tag_seq = tag_seq + [self.tag_dictionary.item2idx[b'S-X']]*x_after_seq
+					num_valid = self.mask[i].sum().long().item()
+					if num_valid == 0:
+						# All tokens are X — skip Viterbi, fill with S-X tags
+						confidences = [1] * length
+						tag_seq = [self.tag_dictionary.item2idx[b'S-X']] * length
+						scores = []
+					else:
+						current_feat = feats.masked_select(current_mask).view(num_valid, feats.size(-1))
+						confidences, tag_seq, scores = self._viterbi_decode(current_feat, all_scores=get_all_tags, current_idx = i,)
+						if len(tag_seq) < length:
+							x_before_seq = torch.where(self.mask[i]>0)[0][0].item()
+							confidences = [1]*x_before_seq + confidences
+							tag_seq = [self.tag_dictionary.item2idx[b'S-X']]*x_before_seq + tag_seq
+							x_after_seq = length - len(tag_seq)
+							confidences = confidences + [1]*x_after_seq 
+							tag_seq = tag_seq + [self.tag_dictionary.item2idx[b'S-X']]*x_after_seq
 				else:
 					confidences, tag_seq, scores = self._viterbi_decode(feats[:length], all_scores=get_all_tags, current_idx = i,)
 			else:

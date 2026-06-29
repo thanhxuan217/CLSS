@@ -116,6 +116,14 @@ class Metric(object):
         macro_f_score = sum(class_f_scores) / len(class_f_scores)
         return macro_f_score
 
+    def macro_avg_f_score_no_O(self):
+        """Macro-average F1 excluding the 'O' (outside/non-entity) label."""
+        classes_no_O = [c for c in self.get_classes() if c != "O"]
+        class_f_scores = [self.f_score(class_name) for class_name in classes_no_O]
+        if len(class_f_scores) == 0:
+            return 0.0
+        return round(sum(class_f_scores) / len(class_f_scores), 7)
+
     def micro_avg_accuracy(self):
         return self.accuracy(None)
 
@@ -123,6 +131,16 @@ class Metric(object):
         class_accuracy = [
             self.accuracy(class_name) for class_name in self.get_classes()
         ]
+
+        if len(class_accuracy) > 0:
+            return round(sum(class_accuracy) / len(class_accuracy), 4)
+
+        return 0.0
+
+    def macro_avg_accuracy_no_O(self):
+        """Macro-average accuracy excluding the 'O' (outside/non-entity) label."""
+        classes_no_O = [c for c in self.get_classes() if c != "O"]
+        class_accuracy = [self.accuracy(class_name) for class_name in classes_no_O]
 
         if len(class_accuracy) > 0:
             return round(sum(class_accuracy) / len(class_accuracy), 4)

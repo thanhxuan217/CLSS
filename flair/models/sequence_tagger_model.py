@@ -1,6 +1,7 @@
 import warnings
 import logging
 from pathlib import Path
+# pyrefly: ignore [missing-import]
 import torch.nn
 from torch.nn.parameter import Parameter
 import torch.nn.functional as F
@@ -625,7 +626,7 @@ class SequenceTagger(flair.nn.Model):
 
 			detailed_result = (
 				f"\nMICRO_AVG: acc {metric.micro_avg_accuracy()} - f1-score {metric.micro_avg_f_score()}"
-				f"\nMACRO_AVG: acc {metric.macro_avg_accuracy()} - f1-score {metric.macro_avg_f_score()}"
+				f"\nMACRO_AVG (excl. O): acc {metric.macro_avg_accuracy_no_O()} - f1-score {metric.macro_avg_f_score_no_O()}"
 			)
 			for class_name in metric.get_classes():
 				detailed_result += (
@@ -2697,7 +2698,7 @@ class FastSequenceTagger(SequenceTagger):
 
 			detailed_result = (
 				f"\nMICRO_AVG: acc {metric.micro_avg_accuracy()} - f1-score {metric.micro_avg_f_score()}"
-				f"\nMACRO_AVG: acc {metric.macro_avg_accuracy()} - f1-score {metric.macro_avg_f_score()}"
+				f"\nMACRO_AVG (excl. O): acc {metric.macro_avg_accuracy_no_O()} - f1-score {metric.macro_avg_f_score_no_O()}"
 			)
 			for class_name in metric.get_classes():
 				detailed_result += (
@@ -2806,7 +2807,7 @@ class FastSequenceTagger(SequenceTagger):
 
 			detailed_result = (
 				f"\nMICRO_AVG: acc {metric.micro_avg_accuracy()} - f1-score {metric.micro_avg_f_score()}"
-				f"\nMACRO_AVG: acc {metric.macro_avg_accuracy()} - f1-score {metric.macro_avg_f_score()}"
+				f"\nMACRO_AVG (excl. O): acc {metric.macro_avg_accuracy_no_O()} - f1-score {metric.macro_avg_f_score_no_O()}"
 			)
 			for class_name in metric.get_classes():
 				detailed_result += (

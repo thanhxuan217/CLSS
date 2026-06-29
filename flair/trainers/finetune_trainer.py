@@ -1158,7 +1158,7 @@ class ModelFinetuner(ModelDistiller):
 							"test_score", test_eval_result.main_score, epoch + 1
 						)
 					log.info(test_eval_result.log_line)
-					log.info(test_eval_result.detailed_results)
+					log.info("[TEST - DURING TRAINING]" + test_eval_result.detailed_results)
 					if type(self.corpus) is MultiCorpus:
 						for subcorpus in self.corpus.corpora:
 							log_line(log)
@@ -1169,7 +1169,7 @@ class ModelFinetuner(ModelDistiller):
 								embeddings_storage_mode=embeddings_storage_mode,
 							)
 							log.info(current_result.log_line)
-							log.info(current_result.detailed_results)
+							log.info("[TEST - DURING TRAINING]" + current_result.detailed_results)
 					elif type(self.corpus) is ListCorpus:
 						for index,subcorpus in enumerate(self.corpus.test_list):
 							log_line(log)
@@ -1180,7 +1180,7 @@ class ModelFinetuner(ModelDistiller):
 								embeddings_storage_mode=embeddings_storage_mode,
 							)
 							log.info(current_result.log_line)
-							log.info(current_result.detailed_results)
+							log.info("[TEST - DURING TRAINING]" + current_result.detailed_results)
 
 
 				# determine learning rate annealing through scheduler
@@ -2117,7 +2117,7 @@ class ModelFinetuner(ModelDistiller):
 			)
 			test_results: Result = test_results
 			log.info(test_results.log_line)
-			log.info(test_results.detailed_results)
+			log.info("[FINAL TEST]" + test_results.detailed_results)
 			log_line(log)
 			# if self.model.embedding_selector:
 			#   print(sorted(loader[0].features.keys()))
@@ -2156,7 +2156,7 @@ class ModelFinetuner(ModelDistiller):
 					embeddings_storage_mode="none",
 				)
 				log.info(current_result.log_line)
-				log.info(current_result.detailed_results)
+				log.info("[FINAL TEST]" + current_result.detailed_results)
 				if quiet_mode:
 					if keep_embedding>-1:
 						embedding_name = sorted(loader[0].features.keys())[keep_embedding].split()
@@ -2187,7 +2187,7 @@ class ModelFinetuner(ModelDistiller):
 					embeddings_storage_mode="none",
 				)
 				log.info(current_result.log_line)
-				log.info(current_result.detailed_results)
+				log.info("[FINAL TEST]" + current_result.detailed_results)
 				if quiet_mode:
 					if keep_embedding>-1:
 						embedding_name = sorted(loader[0].features.keys())[keep_embedding].split()

@@ -2104,6 +2104,14 @@ class ModelFinetuner(ModelDistiller):
 			if (hasattr(embedding,'fine_tune') and embedding.fine_tune):
 				embedding.fine_tune = False
 		if overall_test:
+			_test_files = []
+			_td = self.corpus.test
+			if hasattr(_td, 'datasets'):
+				for _ds in _td.datasets:
+					_test_files.append(str(getattr(_ds, 'path_to_column_file', getattr(_ds, 'dataset', _ds))))
+			elif hasattr(_td, 'path_to_column_file'):
+				_test_files.append(str(_td.path_to_column_file))
+			log.info(f"[TEST FILE(s) - OVERALL]: {_test_files if _test_files else 'unknown'}")
 			loader=LazyColumnDataLoader(self.corpus.test,eval_mini_batch_size, use_bert=self.use_bert,tokenizer=self.bert_tokenizer, model = self.model, sentence_level_batch = self.sentence_level_batch, sort_data=sort_data)
 			loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 			with torch.no_grad():
@@ -2117,7 +2125,7 @@ class ModelFinetuner(ModelDistiller):
 			)
 			test_results: Result = test_results
 			log.info(test_results.log_line)
-			log.info("[FINAL TEST]" + test_results.detailed_results)
+			log.info("[FINAL TEST - OVERALL (all corpora combined)]" + test_results.detailed_results)
 			log_line(log)
 			# if self.model.embedding_selector:
 			#   print(sorted(loader[0].features.keys()))
@@ -2146,6 +2154,8 @@ class ModelFinetuner(ModelDistiller):
 			for subcorpus in self.corpus.corpora:
 				log_line(log)
 				log.info('current corpus: '+subcorpus.name)
+				_sub_test_file = str(getattr(subcorpus.test, 'path_to_column_file', 'unknown'))
+				log.info(f"[TEST FILE - SUBCORPUS: {subcorpus.name}]: {_sub_test_file}")
 				loader=LazyColumnDataLoader(subcorpus.test,eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, model = self.model, sentence_level_batch = self.sentence_level_batch, sort_data=sort_data)
 				loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 				with torch.no_grad():
@@ -2156,7 +2166,7 @@ class ModelFinetuner(ModelDistiller):
 					embeddings_storage_mode="none",
 				)
 				log.info(current_result.log_line)
-				log.info("[FINAL TEST]" + current_result.detailed_results)
+				log.info(f"[FINAL TEST - SUBCORPUS: {subcorpus.name}]" + current_result.detailed_results)
 				if quiet_mode:
 					if keep_embedding>-1:
 						embedding_name = sorted(loader[0].features.keys())[keep_embedding].split()
@@ -2177,6 +2187,8 @@ class ModelFinetuner(ModelDistiller):
 			for index,subcorpus in enumerate(self.corpus.test_list):
 				log_line(log)
 				log.info('current corpus: '+self.corpus.targets[index])
+				_sub_test_file = str(getattr(subcorpus, 'path_to_column_file', 'unknown'))
+				log.info(f"[TEST FILE - SUBCORPUS: {self.corpus.targets[index]}]: {_sub_test_file}")
 				loader=LazyColumnDataLoader(subcorpus,eval_mini_batch_size,use_bert=self.use_bert,tokenizer=self.bert_tokenizer, model = self.model, sentence_level_batch = self.sentence_level_batch, sort_data=sort_data)
 				loader.assign_tags(self.model.tag_type,self.model.tag_dictionary)
 				with torch.no_grad():
@@ -2187,7 +2199,7 @@ class ModelFinetuner(ModelDistiller):
 					embeddings_storage_mode="none",
 				)
 				log.info(current_result.log_line)
-				log.info("[FINAL TEST]" + current_result.detailed_results)
+				log.info(f"[FINAL TEST - SUBCORPUS: {self.corpus.targets[index]}]" + current_result.detailed_results)
 				if quiet_mode:
 					if keep_embedding>-1:
 						embedding_name = sorted(loader[0].features.keys())[keep_embedding].split()

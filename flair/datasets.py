@@ -91,7 +91,7 @@ class ColumnCorpus(Corpus):
             in_memory=in_memory,
         )
 
-        # read in test file if exists, otherwise sample 10% of train data as test dataset
+        # read in test file if exists, otherwise set test to None
         if test_file is not None:
             test = ColumnDataset(
                 test_file,
@@ -101,13 +101,9 @@ class ColumnCorpus(Corpus):
                 in_memory=in_memory,
             )
         else:
-            train_length = len(train)
-            test_size: int = round(train_length / 10)
-            splits = random_split(train, [train_length - test_size, test_size])
-            train = splits[0]
-            test = splits[1]
+            test = None
 
-        # read in dev file if exists, otherwise sample 10% of train data as dev dataset
+        # read in dev file if exists, otherwise set dev to None
         if dev_file is not None:
             dev = ColumnDataset(
                 dev_file,
@@ -117,11 +113,7 @@ class ColumnCorpus(Corpus):
                 in_memory=in_memory,
             )
         else:
-            train_length = len(train)
-            dev_size: int = round(train_length / 10)
-            splits = random_split(train, [train_length - dev_size, dev_size])
-            train = splits[0]
-            dev = splits[1]
+            dev = None
 
 
         super(ColumnCorpus, self).__init__(train, dev, test, name=data_folder.name)

@@ -80,7 +80,7 @@ train:
   mini_batch_size: 64
   gradient_accumulation_steps: 1
 
-  max_epochs: 2
+  max_epochs: 3
 
   monitor_test: true
   train_with_dev: true
